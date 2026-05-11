@@ -1,0 +1,47 @@
+services:
+  # Garnet Server
+  garnet:
+    container_name: setgame-garnet
+    image: 'ghcr.io/microsoft/garnet'
+    ulimits:
+      memlock: -1
+    ports:
+      - "6379:6379"
+    volumes:
+      - garnetdata:/data
+    networks:
+      - setgame-network
+
+  # ASP.NET Core 10 client+API garnet (replaces nginx). Serves the SPA
+  # statically and exposes the /api/* endpoints, including SSE streams driven
+  # by Garnet pub/sub.
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        - CONTAINER_APP_ENV_DOMAIN=${CONTAINER_APP_ENV_DOMAIN:-}
+        - MSRHUB_ENV_DOMAIN=${MSRHUB_ENV_DOMAIN:-localhost}
+        - GIT_COMMIT_HASH=${GIT_COMMIT_HASH:-unknown}
+    container_name: setgame-server
+    image: setgame-server:${IMAGE_VERSION:-latest}
+    ports:
+      - "8080:8080"
+    environment:
+      - CONTAINER_APP_ENV_DOMAIN=${CONTAINER_APP_ENV_DOMAIN:-}
+      - MSRHUB_ENV_DOMAIN=${MSRHUB_ENV_DOMAIN:-localhost}
+      - GARNET_HOST=${GARNET_HOST:-setgame-garnet}
+      - GARNET_PORT=${GARNET_PORT:-6379}
+      - GIT_COMMIT_HASH=${GIT_COMMIT_HASH:-unknown}
+    depends_on:
+      - garnet
+    networks:
+      - setgame-network
+    restart: unless-stopped
+
+volumes:
+  garnetdata:
+
+networks:
+  setgame-network:
+    driver: bridge

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set! Card Game</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="topbar">
+        <h1>SET!</h1>
+        <nav class="topnav">
+            <a href="help.html" class="link-btn">Help</a>
+        </nav>
+        <div class="me" id="me"></div>
+    </div>
+
+    <!-- Lobby view -->
+    <section id="lobby" class="view">
+        <div class="lobby-create">
+            <h2>Start a new game</h2>
+            <form id="create-form">
+                <input id="create-name" type="text" placeholder="Game name (e.g. Friday Lunch)" maxlength="40" required>
+                <button type="submit">Create</button>
+            </form>
+        </div>
+        <div class="lobby-columns">
+            <div class="lobby-leaders">
+                <div class="lobby-list-header">
+                    <h2>Top Players</h2>
+                </div>
+                <ol id="leaderboard-list"></ol>
+                <p id="leaderboard-empty" class="muted" hidden>No wins recorded yet — finish a game to get on the board!</p>
+            </div>
+            <div class="lobby-list">
+                <div class="lobby-list-header">
+                    <h2>Open games</h2>
+                    <button id="refresh-btn" class="link-btn">Refresh</button>
+                </div>
+                <ul id="games-list"></ul>
+                <p id="lobby-empty" class="muted" hidden>No games yet. Create one above to get started.</p>
+            </div>
+        </div>
+    </section>
+
+    <script src="js/client.js?v=3"></script>
+    <script src="js/lobby.js?v=3"></script>
+</body>
+</html>

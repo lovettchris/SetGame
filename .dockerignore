@@ -1,0 +1,57 @@
+# This is the ONLY .dockerignore that Docker reads, because the build context
+# is the repo root (context: . in docker-compose.yml). Sub-directory
+# .dockerignore files (e.g. server/.dockerignore) would only apply if the
+# build context were set to that sub-directory.
+#
+# Both Dockerfiles (server/Dockerfile, client/Dockerfile) use repo-root-
+# relative COPY paths (e.g. "COPY server/ ."), confirming the repo root
+# as the build context. The MSR Hub CI workflow (.github/workflows/
+# deploy-msrhub.yml) invokes "docker compose build" which delegates to
+# docker-compose.yml.
+
+# Git
+.git/
+.github/
+
+# Infrastructure (not needed in Docker images)
+infra/
+manifest/
+scripts/
+specs/
+samples/
+msr-discovery/
+
+# IDE and tools
+.vscode/
+.claude/
+.skills/
+.playwright-cli/
+.data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+**/.venv/
+**/.pytest_cache/
+.mypy_cache/
+.cache/
+htmlcov/
+.coverage
+
+# Production images should not use node_modules or prebuilt frontend artifacts.
+node_modules/
+client/dist/
+dist/
+
+# .NET build artifacts (server image does its own publish inside the container)
+**/bin/
+**/obj/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs and test artifacts
+*.log
+test_artifact_issue.py

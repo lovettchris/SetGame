@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set! — Help</title>
+    <link rel="stylesheet" href="css/style.css?v=9">
+</head>
+<body>
+    <div class="topbar">
+        <h1>SET!</h1>
+        <nav class="topnav">
+            <a href="/" class="link-btn">&larr; Lobby</a>
+        </nav>
+    </div>
+
+    <section class="view help-view">
+        <article class="help-card">
+            <h2>How to play Set</h2>
+            <p>
+                The deck has
+                <strong>81 unique cards</strong> that vary across four
+                features &mdash; each with three possibilities:
+            </p>
+            <ul>
+                <li><strong>Number</strong> &mdash; one, two, or three shapes</li>
+                <li><strong>Shape</strong> &mdash; diamond, squiggle, or oval</li>
+                <li><strong>Shading</strong> &mdash; solid, striped, or open</li>
+                <li><strong>Color</strong> &mdash; red, green, or purple</li>
+            </ul>
+            <p>
+                Every possible combination appears exactly once. When a card
+                shows multiple shapes, all the shapes share the same shape,
+                shading, and color.
+            </p>
+
+            <h3>What's a "set"?</h3>
+            <p>
+                Three cards form a set if, <em>for each one of the four
+                features</em>, the three cards are either
+                <strong>all the same</strong> or
+                <strong>all different</strong>. If two cards match on a
+                feature and the third doesn't, it is <em>not</em> a set.
+            </p>
+
+            <h3>Game flow</h3>
+            <ul>
+                <li>The dealer lays out 12 cards. Players race to find a set.</li>
+                <li>There is no turn taking, the game is a race to see who can find a set first.</li>
+                <li>When a set is taken, three new cards are dealt into the empty slots.</li>
+                <li>If nobody can find a set, every player can vote for a <strong>Hint</strong> &mdash; once everyone votes the server either reveals a card from a real set or, if there isn't one, deals 3 more cards.</li>
+                <li>The board can grow from 12 to 15 to 18 to 21 cards. Mathematically a set must exist among any 21 cards, so it never grows further.</li>
+                <li>The game ends when the deck is empty and no sets remain on the table. The player with the most sets wins.</li>
+            </ul>
+
+            <h3>Examples</h3>
+            <p>Three valid sets &mdash; for every feature, the cards are all the same or all different:</p>
+            <div id="good-examples" class="example-grid"></div>
+            <p>Three invalid sets &mdash; each one fails because exactly two cards match on a single feature:</p>
+            <div id="bad-examples" class="example-grid"></div>
+        </article>
+
+        <article class="help-card">
+            <h2>Multiplayer UX cheat sheet</h2>
+
+            <h3>Lobby &amp; identity</h3>
+            <ul>
+                <li>The <strong>Lobby</strong> lists every open game with name, player count, and elapsed time.</li>
+                <li>It also lists the leaderboard for the top players showing top points score and # wins. The score
+                    is weighted by how many people you beat in each game, so beating 10 players is worth more than beating 2 players,
+                    even though both are just "1 win". You only get a score of zero for playing against yourself.
+                </li>
+                <li>Each game has its own page &mdash; the URL is shareable / bookmarkable.</li>
+                <li><strong>Leave Game</strong> sends you back to the lobby. Your row stays in the players panel, dimmed and
+                    tagged <strong>LEFT</strong>; if you rejoin, your score continues.</li>
+            </ul>
+
+            <h3>Selecting cards</h3>
+            <ul>
+                <li>Click a card to select it. After three are selected the server checks for a set automatically.</li>
+                <li><strong>Selections are private.</strong> What you've clicked is invisible to other players, and other players' actions never modify your selection &mdash; with one exception below.</li>
+                <li>Click the page background to clear your current selection.</li>
+                <li>An invalid set shows a red message explaining the first failing property; the cards stay highlighted until you click somewhere else.</li>
+            </ul>
+
+            <h3>Hint (distributed vote)</h3>
+            <ul>
+                <li>Hint is a <strong>vote</strong>, not an instant reveal. The badge (e.g. <code>1/3</code>) shows how many players have voted in the current round.</li>
+                <li>When everyone votes, the next card from a real set is added to <em>everyone's</em> selection.</li>
+                <li>You can build on this selection hint or select other cards if you want.</li>
+                <li>If every one asked for three hints then those cards are removed and nobody scores for that round.</li>
+                <li>If the board has no valid set, the agreed upon hint will deal 3 more cards causing the hand to grow.</li>
+            </ul>
+
+            <h3>Race fairness</h3>
+            <ul>
+                <li>The server measures each player's ping time and waits a short window so the player who actually clicked first wins,
+                    regardless of who's on the slowest connection.</li>
+                <li>If someone beats you to a set you submitted, you'll see <em>"&lt;winner&gt; beat you, sorry"</em>.</li>
+                <li>Two non-overlapping sets submitted in the same window can both succeed.</li>
+            </ul>
+
+            <h3>Scoreboard &amp; broadcasts</h3>
+            <ul>
+                <li>The Players strip is sorted by sets found. Your row is highlighted; the most-recent ping (in ms) appears as a small pill next to each player.</li>
+                <li>A scoring set pulses the three matched cards in yellow on every screen, then the cards flip away and the scorer's row sparkles.</li>
+                <li>Players who go silent for more than 30 seconds are dimmed automatically and they no long need to vote for hints; same is true for players who leave the game.</li>
+            </ul>
+
+            <h3>Game over &amp; new round</h3>
+            <ul>
+                <li>When the deck empties and no sets remain, an overlay shows the winner, your final count, and elapsed time.</li>
+                <li><strong>New Round</strong> wipes the board, reshuffles, and resets every player &mdash; everyone auto-rejoins so the next game starts truly fresh.</li>
+                <li><strong>Export Game</strong> downloads a JSON file with the initial deck shuffle and every accepted move, so the round can be replayed or analysed offline.</li>
+            </ul>
+        </article>
+
+
+        <article class="help-card">
+            <h2>About the game</h2>
+            <p>
+                SET is a real-time card game designed by Marsha Falco in 1974 and published by Set Enterprises in 1991.
+                There is some pretty interesting mathematics about the game available on
+                <a href="https://en.wikipedia.org/wiki/Set_(card_game)" target="_blank">https://en.wikipedia.org/wiki/Set_(card_game)</a>
+                including a proof by Donald Knuth found in 2001 that the maximum number of cards that can be laid out without a valid set is 20.
+            </p>
+            <h3>Application Architecture</h3>
+            <p>
+                This game is show-case example of the <a href="https://github.com/microsoft/garnet">MSR Garnet in-memory cache</a>
+                and in particular how it can be used as an optimized store for game state and real-time pub/sub eventing across
+                all web clients that have joined the same game, for super fast real time game play, which is required for this type
+                of game that is a race (i.e. there is no turn taking).
+            </p>
+            <p>
+                See <a href="https://github.com/msr-central/setgame/blob/main/specs/architecture.md">Software Architecture</a>.
+                Source code is available at <a href="https://github.com/msr-central/setgame/" target="_blank">https://github.com/msr-central/setgame/</a>.
+                The game is implemented entirely in C# using .NET 10.0 with a single ASP.NET Core server hosting the game web UI, and the back end
+                game state apis that handle all game logic and rules enforcement. The served web client is a three page application implemented in
+                vanilla JavaScript, one for game lobby, one for the game itself, and this one for help.  The game client uses the
+                <a href="https://developer.mozilla.org/en-US/docs/Web/API/EventSource">JavaScript
+                SSE EventSource API</a> to subscribe to real-time game events broadcast from the server hosted at <code>/api/games/${id}/events</code>.
+            </p>
+        </article>
+    </section>
+
+    <script src="js/client.js?v=11"></script>
+    <script src="js/renderer.js?v=11"></script>
+    <script>
+        const goodSets = [
+            {
+                cards: ['1-diamond-solid-red', '2-squiggle-solid-green', '3-oval-solid-purple'],
+                why: 'Shading is the same on all three (solid). Number, shape, and color are all different. Every feature passes the rule.'
+            },
+            {
+                cards: ['1-diamond-open-red', '2-squiggle-striped-green', '3-oval-solid-purple'],
+                why: 'All four features are all-different across the three cards &mdash; the strongest possible set.'
+            },
+            {
+                cards: ['1-diamond-solid-green', '2-squiggle-solid-green', '3-oval-solid-green'],
+                why: 'Color and shading are the same on all three (green, solid). Number and shape are all different.'
+            }
+        ];
+        const badSets = [
+            {
+                cards: ['1-oval-solid-red', '1-squiggle-solid-red', '2-diamond-solid-red'],
+                why: 'Number fails: two cards show 1 shape and one card shows 2 &mdash; that "two-and-one" pattern is exactly what is forbidden.'
+            },
+            {
+                cards: ['2-oval-solid-red', '2-squiggle-striped-red', '2-diamond-solid-green'],
+                why: 'Color fails: two reds and one green. (Number is fine &mdash; all 2s &mdash; but one bad feature is enough to reject the set.)'
+            },
+            {
+                cards: ['1-diamond-solid-green', '2-squiggle-solid-green', '3-oval-striped-green'],
+                why: 'Shading fails: two solids and one striped. The all-same-or-all-different rule has to hold for <em>every</em> feature.'
+            }
+        ];
+        function renderExample(host, examples) {
+            for (const ex of examples) {
+                const wrap = document.createElement('div');
+                wrap.className = 'example-row';
+                const trio = document.createElement('div');
+                trio.className = 'example-trio';
+                for (const id of ex.cards) {
+                    const card = SetClient.parseCard(id);
+                    const cell = document.createElement('div');
+                    cell.className = 'example-card';
+                    cell.innerHTML = CardRenderer.render(card);
+                    trio.appendChild(cell);
+                }
+                const why = document.createElement('p');
+                why.className = 'example-why';
+                why.innerHTML = ex.why;
+                wrap.appendChild(trio);
+                wrap.appendChild(why);
+                host.appendChild(wrap);
+            }
+        }
+        renderExample(document.getElementById('good-examples'), goodSets);
+        renderExample(document.getElementById('bad-examples'), badSets);
+    </script>
+</body>
+</html>
