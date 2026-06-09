@@ -65,11 +65,11 @@ public class GameState
     public int DeckRemaining => Deck.Count;
 }
 
-public record GameSummary(string Id, string Name, int PlayerCount, long StartedAt, string Status);
+public record GameSummary(string Id, string Name, int PlayerCount, long StartedAt, string Status, bool HasReplay = false);
 
 /// <summary>All-time wins for one player, stored in the global leaderboard.
 /// Score accumulates opponents defeated (players in game minus 1) per win.</summary>
-public record LeaderboardEntry(string PlayerId, string PlayerName, int Wins, int Score);
+public record LeaderboardEntry(string PlayerId, string PlayerName, int Wins, int Score, string? LastReplayGameId = null);
 
 /// <summary>One accepted set submission. Recorded for export/replay.
 /// <see cref="Kind"/> is "found" for a normal scoring find or "hint"

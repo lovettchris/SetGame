@@ -57,6 +57,21 @@ public class GarnetGameStore : IAsyncDisposable
     public async Task<string[]> SMembersAsync(string key)
         => await _client.ExecuteForStringArrayResultAsync("SMEMBERS", new[] { key }) ?? Array.Empty<string>();
 
+    public Task SetStringAsync(string key, string value)
+        => _client.StringSetAsync(key, value);
+
+    public async Task<string?> GetStringAsync(string key)
+    {
+        var s = await _client.StringGetAsync(key);
+        return string.IsNullOrEmpty(s) ? null : s;
+    }
+
+    public async Task<bool> SIsMemberAsync(string key, string member)
+    {
+        var result = await _client.ExecuteForLongResultAsync("SISMEMBER", new[] { key, member });
+        return result == 1;
+    }
+
     public async ValueTask DisposeAsync()
     {
         _client.Dispose();

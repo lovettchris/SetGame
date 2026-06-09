@@ -394,6 +394,15 @@ public static class SetGameEngine
 
         Deal(s.Board, s.Deck, 3);
         s.LastDealtIndices = Enumerable.Range(s.Board.Count - 3, 3).ToList();
+        // Record the deal so the replay engine can reconstruct board state.
+        s.Moves.Add(new MoveRecord
+        {
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            PlayerId = "deal",
+            PlayerName = "deal",
+            Cards = new[] { s.Board[^3]!, s.Board[^2]!, s.Board[^1]! },
+            Kind = "deal",
+        });
         ResetHint(s);
         s.Version++;
         return new(true, "No sets found \u2014 dealt 3 more cards", "info");

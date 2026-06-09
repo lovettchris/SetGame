@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set! Replay</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/theme.js"></script>
+</head>
+<body>
+    <div class="topbar">
+        <h1>SET!</h1>
+        <nav class="topnav">
+            <a href="/" class="link-btn" id="back-link">← Back</a>
+            <button id="theme-toggle" class="link-btn" title="Switch theme" aria-label="Switch theme">☀️</button>
+        </nav>
+        <div class="me" id="me"></div>
+    </div>
+
+    <section id="replay-page" class="view">
+        <div id="replay-header" class="replay-header">
+            <span id="replay-game-name" class="replay-game-name"></span>
+            <span id="replay-players" class="replay-players-summary"></span>
+        </div>
+
+        <div class="replay-layout">
+            <div id="replay-board" class="replay-board-area">
+                <div id="board"></div>
+            </div>
+
+            <div class="replay-sidebar">
+                <div class="replay-sidebar-title">Moves</div>
+                <ol id="move-list" class="move-list"></ol>
+            </div>
+        </div>
+
+        <div class="replay-controls">
+            <div class="replay-transport">
+                <button id="btn-first" title="First frame" class="transport-btn">◀◀</button>
+                <button id="btn-prev"  title="Previous"    class="transport-btn">◀</button>
+                <button id="btn-play"  title="Play/Pause"  class="transport-btn play-btn">▶</button>
+                <button id="btn-next"  title="Next"        class="transport-btn">▶</button>
+                <button id="btn-last"  title="Last frame"  class="transport-btn">▶▶</button>
+            </div>
+            <input id="scrubber" type="range" min="0" value="0" class="replay-scrubber" aria-label="Frame scrubber">
+            <div class="replay-speed">
+                <span class="speed-label">Speed:</span>
+                <button class="speed-btn" data-speed="0.5">0.5×</button>
+                <button class="speed-btn active" data-speed="1">1×</button>
+                <button class="speed-btn" data-speed="2">2×</button>
+                <button class="speed-btn" data-speed="4">4×</button>
+            </div>
+            <div id="replay-status" class="replay-status"></div>
+        </div>
+    </section>
+
+    <script src="js/renderer.js?v=13"></script>
+    <script src="js/client.js?v=3"></script>
+    <script src="js/replay.js?v=1"></script>
+</body>
+</html>

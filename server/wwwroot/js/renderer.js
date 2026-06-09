@@ -5,9 +5,10 @@ class CardRenderer {
      * Render a card as an SVG element.
      * @param {Card} card - The card to render
      * @param {boolean} selected - Whether the card is currently selected
+     * @param {object} [opts] - Optional rendering overrides (e.g. { stripeSize, stripeWidth })
      * @returns {string} SVG markup string
      */
-    static render(card, selected = false) {
+    static render(card, selected = false, opts = {}) {
         const width = 140;
         const height = 200;
 
@@ -18,7 +19,7 @@ class CardRenderer {
         }
 
         const strokeColor = CardRenderer.getColor(card.color);
-        const fillInfo = CardRenderer.getFill(card.shading, card.color, card.id);
+        const fillInfo = CardRenderer.getFill(card.shading, card.color, card.id, opts);
 
         // Position shapes vertically centered
         const shapes = CardRenderer.getShapeSVGs(card.number, card.shape, fillInfo, strokeColor, width, height);
@@ -47,8 +48,10 @@ class CardRenderer {
     /**
      * Get fill style and pattern definitions for the shading type.
      */
-    static getFill(shading, color, cardId) {
+    static getFill(shading, color, cardId, opts = {}) {
         const strokeColor = CardRenderer.getColor(color);
+        const stripeSize = opts.stripeSize || 4;
+        const stripeWidth = opts.stripeWidth || 1;
         switch (shading) {
             case 'solid':
                 return {
@@ -61,8 +64,8 @@ class CardRenderer {
                     fill: `url(#${patternId})`,
                     defs: `
                         <pattern id="${patternId}" patternUnits="userSpaceOnUse"
-                                 width="4" height="4" patternTransform="rotate(0)">
-                            <rect width="4" height="1" fill="${strokeColor}" shape-rendering="crispEdges"/>
+                                 width="${stripeSize}" height="${stripeSize}" patternTransform="rotate(0)">
+                            <rect width="${stripeSize}" height="${stripeWidth}" fill="${strokeColor}" shape-rendering="crispEdges"/>
                         </pattern>
                     `
                 };

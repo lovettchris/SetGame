@@ -32,12 +32,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const starHtml = rankNum === 1
                     ? `<span class="leader-star">✨</span>`
                     : '';
+                const replayHtml = entry.lastReplayGameId
+                    ? `<a class="replay-icon-btn" href="/replay.html?game=${encodeURIComponent(entry.lastReplayGameId)}" title="Watch replay">🎬</a>`
+                    : '';
                 li.innerHTML = `
                     <span class="leader-rank">${rankLabel}</span>
                     <span class="leader-name">${escapeHtml(entry.playerName)}</span>
                     <span class="leader-score"><strong>${entry.score}</strong> pts</span>
                     <span class="leader-wins">${entry.wins} win${entry.wins === 1 ? '' : 's'}</span>
                     ${starHtml}
+                    ${replayHtml}
                 `;
                 leaderboardEl.appendChild(li);
             });
@@ -54,11 +58,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             const li = document.createElement('li');
             li.className = 'game-row';
             const startedAgo = formatAgo(Date.now() - g.startedAt);
+            const replayHtml = g.status === 'ended' && g.hasReplay
+                ? `<a class="replay-icon-btn" href="/replay.html?game=${encodeURIComponent(g.id)}" title="Watch replay">🎬</a>`
+                : '';
             li.innerHTML = `
                 <div class="game-row-main">
                     <span class="game-row-name">${escapeHtml(g.name)}</span>
                     <span class="game-row-meta">${g.playerCount} player${g.playerCount === 1 ? '' : 's'} · started ${startedAgo}</span>
                 </div>
+                ${replayHtml}
                 <button class="join-btn" data-id="${g.id}">Join</button>
             `;
             gamesListEl.appendChild(li);

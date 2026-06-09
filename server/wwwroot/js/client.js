@@ -137,10 +137,22 @@ const SetClient = {
         return r.json();
     },
 
+    /** Returns the parsed replay export object for a finished game. */
+    async getReplay(id) {
+        const r = await this._apiFetch(`/api/games/${id}/replay`);
+        if (!r.ok) throw new Error(`Replay not found (${r.status})`);
+        return r.json();
+    },
+
+    /** Returns a list of { id, name, startedAt, playerCount } for all saved replays. */
+    async listReplays() {
+        const r = await this._apiFetch('/api/replays');
+        return r.json();
+    },
+
     /** Download a JSON record of the game (initial deck + every move).
      *  Triggers a browser download — does not return the parsed body. */
-    async exportGame(id, name) {
-        const r = await this._apiFetch(`/api/games/${id}/export`);
+    async exportGame(id, name) {        const r = await this._apiFetch(`/api/games/${id}/export`);
         if (!r.ok) throw new Error('Export failed');
         const blob = await r.blob();
         const url = URL.createObjectURL(blob);

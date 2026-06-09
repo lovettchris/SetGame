@@ -1,5 +1,70 @@
 /* Set Game - Styles */
 
+/* ─────────────────────── Theme tokens ─────────────────────── */
+
+:root {
+    /* Dark theme (default) */
+    --bg:               #1a1a2e;
+    --text:             #eee;
+    --text-strong:      #fff;
+    --muted:            #8a92b2;
+    --card-bg:          #16213e;
+    --border:           #2a345a;
+    --input-bg:         #0f1830;
+    --input-border:     #3a4570;
+    --link-color:       #c8d3ff;
+    --accent:           #e2b714;
+    --accent-hover:     #d4a80f;
+    --accent-text:      #1a1a2e;
+    --card-back-1:      #3a3a6e;
+    --card-back-2:      #2a2a5e;
+    --card-back-border: #555;
+    --blank-bg:         rgba(255,255,255,0.06);
+    --blank-border:     rgba(255,255,255,0.15);
+    --ping-bg:          #0f1730;
+    --ping-color:       #b8c0e0;
+    --tag-bg:           #4a4a5e;
+    --tag-color:        #d0d0d8;
+    --example-row-bg:   rgba(255,255,255,0.03);
+    --example-bg:       rgba(255,255,255,0.04);
+    --code-bg:          rgba(255,255,255,0.08);
+    --ghost-color:      #aaa;
+    --ghost-border:     #3a4570;
+    --overlay-bg:       rgba(0,0,0,0.7);
+}
+
+[data-theme="light"] {
+    --bg:               #f0f2f8;
+    --text:             #1a1a2e;
+    --text-strong:      #0f1420;
+    --muted:            #6b7280;
+    --card-bg:          #ffffff;
+    --border:           #d0d8ec;
+    --input-bg:         #ffffff;
+    --input-border:     #b8c4de;
+    --link-color:       #3b5bdb;
+    --accent:           #b5350a;
+    --accent-hover:     #922b08;
+    --accent-text:      #ffffff;
+    --card-back-1:      #d0d8f8;
+    --card-back-2:      #bbc8f0;
+    --card-back-border: #aab4d8;
+    --blank-bg:         rgba(0,0,0,0.04);
+    --blank-border:     rgba(0,0,0,0.12);
+    --ping-bg:          #eef0f8;
+    --ping-color:       #4a5268;
+    --tag-bg:           #e0e4f0;
+    --tag-color:        #4a5268;
+    --example-row-bg:   rgba(0,0,0,0.02);
+    --example-bg:       rgba(0,0,0,0.03);
+    --code-bg:          rgba(0,0,0,0.06);
+    --ghost-color:      #4a5268;
+    --ghost-border:     #b8c4de;
+    --overlay-bg:       rgba(0,0,0,0.5);
+}
+
+/* ────────────────────────────────────────────────────────────── */
+
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
@@ -8,29 +73,38 @@
 
 body {
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: #1a1a2e;
-    color: #eee;
+    background: var(--bg);
+    color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
 
-    /* Shared responsive sizing for every top-level row (topbar, toolbar,
-       scoreboard, players, board). Driving them all from the same column
-       math keeps the board horizontally aligned with the title/scores
-       at every viewport width. */
+    /* Base responsive sizing. On the game page JS overrides --col-w on
+       every resize so the board fits both horizontally and vertically;
+       the lobby still uses this static clamp. */
     --col-w: clamp(70px, 14vw, 200px);
     --col-gap: clamp(6px, 1.2vw, 12px);
     --board-pad: clamp(8px, 2vw, 16px);
-    --layout-w: calc(6 * var(--col-w) + 5 * var(--col-gap) + 2 * var(--board-pad));
+    /* --board-cols is set by JS when the column count changes (default 4) */
+    --board-cols: 4;
+    --layout-w: calc(var(--board-cols) * var(--col-w) + (var(--board-cols) - 1) * var(--col-gap) + 2 * var(--board-pad));
+}
+
+/* Game page: lock to viewport height so no scrolling is needed.
+   --col-w is computed and set dynamically by JS (updateColWidth). */
+body:has(#game) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Header / Toolbar */
 .toolbar {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 16px 24px;
+    gap: var(--col-gap);
+    padding: var(--board-pad);
     width: 100%;
     max-width: var(--layout-w);
     flex-wrap: wrap;
@@ -39,7 +113,7 @@ body {
 
 .toolbar h1 {
     font-size: 1.6rem;
-    color: #e2b714;
+    color: var(--accent);
     letter-spacing: 2px;
     margin-right: auto;
 }
@@ -65,67 +139,54 @@ body {
 #new-game-btn:hover { background: #c0392b; }
 
 #hint-btn {
-    background: #f39c12;
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-text);
 }
-#hint-btn:hover { background: #d68910; }
+#hint-btn:hover { background: var(--accent-hover); }
 
-/* Scoreboard area — fixed height container for score + message overlay */
-.scoreboard-area {
-    position: relative;
-    width: 100%;
-    max-width: var(--layout-w);
-    min-height: 56px;
-}
-
-/* Scoreboard */
-.scoreboard {
+/* Toolbar stats — inline with Hint button, wrap together on narrow screens */
+.toolbar-stats {
     display: flex;
-    gap: 24px;
-    padding: 8px 24px 16px;
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-left: 8px;
 }
 
 .stat {
     text-align: center;
-    font-size: 0.85rem;
-    color: #aaa;
+    font-size: 0.75rem;
+    color: var(--muted);
+    white-space: nowrap;
 }
 
 .stat .value {
-    display: block;
-    font-size: 2rem;
+    display: inline;
+    font-size: 1.1rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-strong);
+    margin-right: 3px;
 }
 
 /* "Your Sets" is the only meaningful score now — give it a soft glow so
    it reads as the headline stat (color only; size matches the other
    stats so labels line up horizontally). */
 .stat.highlight {
-    color: #f1c40f;
+    color: var(--accent);
 }
 .stat.highlight .value {
-    color: #f1c40f;
+    color: var(--accent);
     text-shadow: 0 0 10px rgba(241, 196, 15, 0.55);
 }
 
-/* Message bar — a compact centered pill that overlays the scoreboard
-   area without inflating to its full height. */
+/* Message bar — a compact pill positioned over the board via JS. */
 .message {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+    position: fixed;
+    z-index: 10;
     padding: 6px 16px;
     border-radius: 999px;
-    text-align: center;
     font-weight: 600;
     font-size: 0.95rem;
     white-space: nowrap;
-    max-width: 90%;
     overflow: hidden;
     text-overflow: ellipsis;
     opacity: 0;
@@ -146,13 +207,12 @@ body {
 
 /* Card Board — responsive column width scales smoothly from a comfy
    200px on desktop down to ~70px on small phones via clamp(). The
-   board's *total* width is always 6 columns + 5 gaps + padding, sized
-   for the maximum layout, so adding/removing the extras column never
-   shifts the base 4×3 cards. Centering uses auto margins so a board
-   wider than the viewport pins to the left edge instead of clipping. */
+   board's width is driven by --board-cols (set by JS, default 4) so
+   it grows/shrinks dynamically when extra columns are dealt and
+   stays centered on wide viewports. */
 #board {
     display: grid;
-    grid-template-columns: repeat(4, var(--col-w));
+    grid-template-columns: repeat(var(--board-cols, 4), var(--col-w));
     grid-auto-columns: var(--col-w);
     gap: var(--col-gap);
     padding: var(--board-pad);
@@ -197,8 +257,8 @@ body {
 
 /* Blank slot where a card was removed */
 .card.blank {
-    background: rgba(255,255,255,0.06);
-    border: 2px dashed rgba(255,255,255,0.15);
+    background: var(--blank-bg);
+    border: 2px dashed var(--blank-border);
     border-radius: 12px;
     cursor: default;
 }
@@ -237,9 +297,9 @@ body {
 
 .card-back {
     transform: rotateY(180deg);
-    background: linear-gradient(135deg, #3a3a6e 25%, #2a2a5e 25%, #2a2a5e 50%, #3a3a6e 50%, #3a3a6e 75%, #2a2a5e 75%);
+    background: linear-gradient(135deg, var(--card-back-1) 25%, var(--card-back-2) 25%, var(--card-back-2) 50%, var(--card-back-1) 50%, var(--card-back-1) 75%, var(--card-back-2) 75%);
     background-size: 12px 12px;
-    border: 3px solid #555;
+    border: 3px solid var(--card-back-border);
 }
 
 .card-svg {
@@ -253,7 +313,7 @@ body {
 .game-over-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.7);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -261,7 +321,7 @@ body {
 }
 
 .game-over-panel {
-    background: #16213e;
+    background: var(--card-bg);
     padding: 40px 48px;
     border-radius: 16px;
     text-align: center;
@@ -270,7 +330,7 @@ body {
 
 .game-over-panel h2 {
     font-size: 2rem;
-    color: #e2b714;
+    color: var(--accent);
     margin-bottom: 16px;
 }
 
@@ -286,21 +346,21 @@ body {
     border-radius: 8px;
     font-size: 1.1rem;
     font-weight: 700;
-    background: #e2b714;
-    color: #1a1a2e;
+    background: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     transition: background 0.2s;
 }
 
 .game-over-panel button:hover {
-    background: #d4a80f;
+    background: var(--accent-hover);
 }
 
 /* Responsive */
 @media (max-width: 600px) {
     .toolbar { padding: 12px; gap: 8px; }
     .toolbar h1 { font-size: 1.2rem; width: 100%; text-align: center; margin-right: 0; }
-    .scoreboard { gap: 12px; }
+    .toolbar-stats { gap: 12px; }
 }
 
 /* Landscape phones / short viewports: vertical space is precious, so
@@ -356,16 +416,10 @@ body {
         text-align: center;
     }
 
-    #game .scoreboard-area {
-        grid-column: 1;
-        grid-row: 2;
+    #game .toolbar-stats {
+        gap: 6px;
+        margin-left: 0;
         width: 100%;
-        max-width: none;
-        min-height: 0;
-    }
-    #game .scoreboard {
-        gap: 10px;
-        padding: 2px 4px;
         justify-content: space-around;
     }
     .stat { font-size: 0.65rem; }
@@ -386,28 +440,11 @@ body {
     .player-score { font-size: 0.9rem; }
 
     /* Board occupies the right column, all 3 rows of the grid.
-       Column width is the smaller of (height-budget) and
-       (width-budget for max 6 cols) so neither dimension overflows.
-       Card aspect ratio is 140:200, so card-height = col-w * (200/140);
-       3 rows + 2 row-gaps + 2 padding must fit in available height. */
+       --col-w is computed by JS (updateColWidth) which accounts for
+       the landscape sidebar and available height automatically. */
     #game #board {
         grid-column: 2;
         grid-row: 1 / span 3;
-        /* col-w sized so 3 rows × card-height (= col-w × 200/140 ≈ 1.43)
-           + gaps + padding fit inside avail height. /4.6 = 3*1.43 plus
-           safety margin for browser chrome. The -60px reserves ~20px
-           bottom margin so the board doesn't sit flush against the edge.
-           Capped at 6-col width. */
-        /* Fallback for browsers without dvh */
-        --col-w: min(
-            calc((100vh - 60px) / 4.6),
-            calc((100vw - 170px) / 6)
-        );
-        /* Preferred: dvh excludes mobile URL-bar chrome */
-        --col-w: min(
-            calc((100dvh - 60px) / 4.6),
-            calc((100vw - 170px) / 6)
-        );
         --col-gap: 4px;
         width: auto;
         max-width: 100%;
@@ -428,11 +465,11 @@ body {
     max-width: var(--layout-w);
     display: flex;
     align-items: center;
-    padding: 16px 24px 0;
+    padding: var(--board-pad) var(--board-pad) 0;
 }
 .topbar h1 {
     font-size: 1.6rem;
-    color: #e2b714;
+    color: var(--accent);
     letter-spacing: 2px;
     margin-right: auto;
 }
@@ -453,33 +490,33 @@ body {
 }
 .help-card {
     width: 100%;
-    background: #16213e;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 20px 28px;
     margin: 8px 0;
     line-height: 1.55;
 }
 .help-card h2 {
-    color: #e2b714;
+    color: var(--accent);
     margin-top: 0;
 }
 .help-card h3 {
-    color: #c8d3ff;
+    color: var(--link-color);
     margin-top: 1.2em;
 }
 a {
-    color: #c8d3ff;
+    color: var(--link-color);
 }
 .help-card ul { padding-left: 22px; }
 .help-card li { margin: 4px 0; }
 .help-card .example {
-    background: rgba(255,255,255,0.04);
-    border-left: 3px solid #e2b714;
+    background: var(--example-bg);
+    border-left: 3px solid var(--accent);
     padding: 8px 12px;
     border-radius: 4px;
 }
 .help-card code {
-    background: rgba(255,255,255,0.08);
+    background: var(--code-bg);
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.9em;
@@ -497,7 +534,7 @@ a {
     display: flex;
     align-items: center;
     gap: 18px;
-    background: rgba(255,255,255,0.03);
+    background: var(--example-row-bg);
     border-radius: 8px;
     padding: 10px 14px;
 }
@@ -522,14 +559,14 @@ a {
 .example-why {
     margin: 0;
     font-size: 0.95em;
-    color: #d8defa;
+    color: var(--text);
 }
 @media (max-width: 600px) {
     .example-row { flex-direction: column; align-items: flex-start; }
 }
 .me {
     font-size: 0.95rem;
-    color: #aaa;
+    color: var(--muted);
 }
 
 .view {
@@ -537,6 +574,13 @@ a {
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+/* Game view fills remaining viewport height so the board never overflows */
+#game.view {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 /* Lobby */
@@ -549,13 +593,13 @@ a {
 
 .lobby-create {
     width: 100%;
-    background: #16213e;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 20px 24px;
     margin: 16px 0;
 }
 .lobby-create h2 {
-    color: #e2b714;
+    color: var(--accent);
     font-size: 1.1rem;
     margin-bottom: 12px;
 }
@@ -577,12 +621,12 @@ a {
 }
 
 .lobby-leaders, .lobby-list {
-    background: #16213e;
+    background: var(--card-bg);
     border-radius: 12px;
     padding: 20px 24px;
 }
 .lobby-leaders h2, .lobby-list h2 {
-    color: #e2b714;
+    color: var(--accent);
     font-size: 1.1rem;
     margin-bottom: 12px;
 }
@@ -594,17 +638,17 @@ a {
     flex: 1;
     padding: 10px 14px;
     border-radius: 6px;
-    border: 1px solid #3a4570;
-    background: #0f1830;
-    color: #fff;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-strong);
     font-size: 1rem;
 }
 #create-form button {
     padding: 10px 20px;
     border: none;
     border-radius: 6px;
-    background: #e2b714;
-    color: #1a1a2e;
+    background: var(--accent);
+    color: var(--accent-text);
     font-weight: 700;
     cursor: pointer;
 }
@@ -625,34 +669,34 @@ a {
     align-items: center;
     gap: 10px;
     padding: 10px 0;
-    border-top: 1px solid #2a345a;
+    border-top: 1px solid var(--border);
 }
 .leader-rank {
     font-size: 1rem;
     font-weight: 700;
-    color: #8a92b2;
+    color: var(--muted);
     min-width: 22px;
     text-align: center;
     flex-shrink: 0;
 }
-.leader-rank-1 .leader-rank { color: #e2b714; }
+.leader-rank-1 .leader-rank { color: var(--accent); }
 .leader-rank-2 .leader-rank { color: #9da8c9; }
 .leader-rank-3 .leader-rank { color: #c67a3c; }
 .leader-name {
     flex: 1;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-strong);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .leader-wins {
     font-size: 0.85rem;
-    color: #8a92b2;
+    color: var(--muted);
     flex-shrink: 0;
 }
 .leader-wins strong {
-    color: #e2b714;
+    color: var(--accent);
     font-size: 1rem;
 }
 
@@ -692,7 +736,7 @@ a {
     align-items: center;
     justify-content: space-between;
     padding: 12px 0;
-    border-top: 1px solid #2a345a;
+    border-top: 1px solid var(--border);
 }
 .game-row-main {
     display: flex;
@@ -704,33 +748,33 @@ a {
 }
 .game-row-meta {
     font-size: 0.85rem;
-    color: #8a92b2;
+    color: var(--muted);
 }
 .join-btn {
-    background: #2980b9;
-    color: #fff;
+    background: var(--accent);
+    color: var(--accent-text);
     border: none;
     padding: 8px 18px;
     border-radius: 6px;
     cursor: pointer;
     font-weight: 600;
 }
-.join-btn:hover { background: #1f6da0; }
-.muted { color: #8a92b2; padding: 8px 0; }
+.join-btn:hover { background: var(--accent-hover); }
+.muted { color: var(--muted); padding: 8px 0; }
 
 /* Game header */
 .game-name {
-    color: #e2b714;
+    color: var(--accent);
     font-weight: 700;
     margin-right: auto;
     margin-left: 12px;
 }
 .toolbar button.ghost {
     background: transparent;
-    color: #aaa;
-    border: 1px solid #3a4570;
+    color: var(--ghost-color);
+    border: 1px solid var(--ghost-border);
 }
-.toolbar button.ghost:hover { background: rgba(255,255,255,0.05); }
+.toolbar button.ghost:hover { background: rgba(128,128,128,0.08); }
 #restart-btn { background: #27ae60; color: #fff; }
 #restart-btn:hover { background: #1f8a4c; }
 
@@ -740,35 +784,35 @@ a {
     max-width: var(--layout-w);
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 0 16px 8px;
+    gap: var(--col-gap);
+    padding: 0 var(--board-pad) var(--col-gap);
 }
 .player {
     display: flex;
     align-items: baseline;
     gap: 8px;
-    background: #16213e;
-    border: 1px solid #2a345a;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 6px 12px;
     font-size: 0.9rem;
 }
-.player-me { border-color: #e2b714; }
-.player-name { font-weight: 600; color: #fff; }
+.player-me { border-color: var(--accent); }
+.player-name { font-weight: 600; color: var(--text-strong); }
 .player-score {
     font-weight: 700;
-    color: #e2b714;
+    color: var(--accent);
     font-size: 1.1rem;
 }
-.player-sets { color: #8a92b2; font-size: 0.8rem; }
+.player-sets { color: var(--muted); font-size: 0.8rem; }
 .player-ping {
     margin-left: 4px;
     padding: 1px 6px;
     font-size: 0.7rem;
     font-weight: 600;
-    color: #b8c0e0;
-    background: #0f1730;
-    border: 1px solid #2a345a;
+    color: var(--ping-color);
+    background: var(--ping-bg);
+    border: 1px solid var(--border);
     border-radius: 4px;
 }
 
@@ -788,8 +832,8 @@ a {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    background: #4a4a5e;
-    color: #d0d0d8;
+    background: var(--tag-bg);
+    color: var(--tag-color);
     border-radius: 4px;
     vertical-align: middle;
 }
@@ -857,4 +901,233 @@ a {
     font-size: 1.3em;
     animation: sparkle-spin 3s linear 1, sparkle-fade 0.6s ease-in 3s forwards 1;
     pointer-events: none;
+}
+
+/* ───────────────────────── Replay page ───────────────────────── */
+
+#replay-page {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0 8px 8px;
+    max-width: 1200px;
+    width: 100%;
+    align-self: center;
+}
+
+.replay-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 8px 4px 4px;
+    flex-wrap: wrap;
+}
+.replay-game-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+.replay-players-summary {
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+/* Two-column layout: board on the left, sidebar on the right */
+.replay-layout {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.replay-board-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* The #board element on the replay page uses the same grid as in game.html */
+#replay-page #board {
+    --col-w: clamp(60px, 11vw, 160px);
+    width: auto;
+    max-width: 100%;
+}
+
+/* Sidebar: scrollable move list */
+.replay-sidebar {
+    display: flex;
+    flex-direction: column;
+    background: var(--card-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    min-height: 0;
+}
+.replay-sidebar-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--border);
+}
+.move-list {
+    list-style: none;
+    overflow-y: auto;
+    flex: 1;
+    padding: 4px 0;
+}
+.move-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    border-left: 3px solid transparent;
+    transition: background 0.15s;
+}
+.move-item:hover {
+    background: var(--blank-bg);
+}
+.move-item.current {
+    background: var(--blank-bg);
+    border-left-color: var(--accent);
+}
+.move-elapsed {
+    color: var(--muted);
+    font-size: 0.75rem;
+    min-width: 36px;
+    flex-shrink: 0;
+}
+.move-actor {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.move-check {
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+/* Player color accents in the move list */
+.color-1 { color: #e74c3c; }
+.color-2 { color: #27ae60; }
+.color-3 { color: #3498db; }
+.color-4 { color: #f39c12; }
+.color-5 { color: #9b59b6; }
+.color-6 { color: #1abc9c; }
+
+/* Controls bar */
+.replay-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    flex-wrap: wrap;
+    background: var(--card-bg);
+    border-radius: 8px;
+    margin-top: 8px;
+}
+.replay-transport {
+    display: flex;
+    gap: 4px;
+}
+.transport-btn {
+    padding: 6px 10px;
+    border: 1px solid var(--ghost-border);
+    background: transparent;
+    color: var(--text);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.15s;
+}
+.transport-btn:hover {
+    background: var(--blank-bg);
+}
+.play-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    min-width: 40px;
+}
+.play-btn:hover {
+    background: var(--accent-hover);
+}
+.replay-scrubber {
+    flex: 1;
+    min-width: 80px;
+    accent-color: var(--accent);
+    height: 4px;
+    cursor: pointer;
+}
+.replay-speed {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.speed-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+.speed-btn {
+    padding: 4px 8px;
+    border: 1px solid var(--ghost-border);
+    background: transparent;
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    transition: background 0.15s, color 0.15s;
+}
+.speed-btn.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+}
+.replay-status {
+    width: 100%;
+    font-size: 0.82rem;
+    color: var(--muted);
+    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 🎬 replay icon/button in lobby and leaderboard */
+.replay-icon-btn {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0.85;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+.replay-icon-btn:hover {
+    opacity: 1;
+}
+
+@media (max-width: 680px) {
+    .replay-layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+    }
+    .replay-sidebar {
+        max-height: 160px;
+    }
 }

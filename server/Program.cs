@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using SetGameServer.Engine;
@@ -6,13 +7,51 @@ using SetGameServer.GarnetIO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var garnetHost = Environment.GetEnvironmentVariable("GARNET_HOST") ?? "localhost";
-var garnetPort = int.Parse(Environment.GetEnvironmentVariable("GARNET_PORT") ?? "6379");
 
-builder.Services.AddSingleton(sp => new GarnetGameStore(garnetHost, garnetPort,
+DnsEndPoint GetGarnetEndPoint()
+{
+    int port = 6379;
+    if (int.TryParse(Environment.GetEnvironmentVariable("GARNET_PORT"), out int p)){ 
+        port = p; 
+    }
+
+    var host = Environment.GetEnvironmentVariable("GARNET_HOST") ?? "localhost";
+
+    // If we are given a full URL, strip it down to just the host name (and port if present).
+    if (Uri.TryCreate(host, UriKind.Absolute, out Uri? result))
+    {
+        var hostPart = result.Host;
+        var portPart = result.IsDefaultPort ? port : result.Port;
+        return new DnsEndPoint(hostPart, portPart);
+    }
+
+    return new DnsEndPoint(host, port);
+}
+
+var garnetHost = GetGarnetEndPoint();
+
+builder.Services.AddSingleton(sp => new GarnetGameStore(garnetHost.Host, garnetHost.Port,
     sp.GetRequiredService<ILogger<GarnetGameStore>>()));
-builder.Services.AddSingleton(sp => new GarnetSubscriber(garnetHost, garnetPort,
+builder.Services.AddSingleton(sp => new GarnetSubscriber(garnetHost.Host, garnetHost.Port,
     sp.GetRequiredService<ILogger<GarnetSubscriber>>()));
+
+// Cosmos DB durable backup (optional — runs as fire-and-forget behind Garnet).
+var cosmosEndpoint = Environment.GetEnvironmentVariable("COSMOS_ENDPOINT");
+var cosmosDb = Environment.GetEnvironmentVariable("COSMOS_DATABASE") ?? "setgame";
+var cosmosManagedId = Environment.GetEnvironmentVariable("COSMOS_MANAGED_IDENTITY_CLIENT_ID");
+if (!string.IsNullOrEmpty(cosmosEndpoint))
+{
+    builder.Services.AddSingleton(sp => new CosmosStore(cosmosEndpoint, cosmosDb, cosmosManagedId,
+        sp.GetRequiredService<ILogger<CosmosStore>>()));
+    builder.Services.AddSingleton<CosmosBackupQueue>();
+    builder.Services.AddSingleton<IBackupQueue>(sp => sp.GetRequiredService<CosmosBackupQueue>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CosmosBackupQueue>());
+}
+else
+{
+    builder.Services.AddSingleton<IBackupQueue>(new NullBackupQueue());
+}
+
 builder.Services.AddSingleton<GameService>();
 
 var app = builder.Build();
@@ -31,7 +70,7 @@ var app = builder.Build();
         {
             await store.ConnectAsync();
             await sub.StartAsync();
-            log.LogInformation("Connected to Garnet at {host}:{port}", garnetHost, garnetPort);
+            log.LogInformation("Connected to Garnet at {host}:{port}", garnetHost.Host, garnetHost.Port);
             break;
         }
         catch (Exception ex) when (DateTime.UtcNow < deadline)
@@ -46,7 +85,24 @@ var app = builder.Build();
         await store.DisposeAsync();
         await sub.DisposeAsync();
     });
+
+    // Initialize Cosmos DB if configured.
+    var cosmos = app.Services.GetService<CosmosStore>();
+    if (cosmos != null)
+    {
+        await cosmos.InitializeAsync();
+        log.LogInformation("Cosmos DB backup enabled");
+
+        app.Lifetime.ApplicationStopping.Register(async () =>
+        {
+            await cosmos.DisposeAsync();
+        });
+    }
 }
+
+var gitCommitHash = Environment.GetEnvironmentVariable("GIT_COMMIT_HASH") ?? "dev";
+
+app.MapGet("/api/version", () => Results.Json(new { commitHash = gitCommitHash }));
 
 app.MapGet("/api/games", async (GameService svc) =>
     Results.Json(await svc.ListAsync()));
@@ -146,6 +202,18 @@ app.MapGet("/api/games/{id}/export", async (string id, GameService svc) =>
         }),
         moves = s.Moves,
     });
+});
+
+// List all persisted replays (id, name, startedAt, playerCount), newest first.
+app.MapGet("/api/replays", async (GameService svc) =>
+    Results.Json(await svc.GetReplaysAsync()));
+
+// Returns the persisted replay snapshot for a game. Falls back to a
+// live export for in-progress or legacy games.
+app.MapGet("/api/games/{id}/replay", async (string id, GameService svc) =>
+{
+    var json = await svc.GetReplayJsonAsync(id);
+    return json == null ? Results.NotFound() : Results.Content(json, "application/json");
 });
 
 // Server-Sent Events: stream pub/sub messages for one game to one client.

@@ -4,13 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Set! — Help</title>
-    <link rel="stylesheet" href="css/style.css?v=9">
+    <link rel="stylesheet" href="css/style.css?v=13">
+    <script src="js/theme.js"></script>
 </head>
 <body>
     <div class="topbar">
         <h1>SET!</h1>
         <nav class="topnav">
             <a href="/" class="link-btn">&larr; Lobby</a>
+            <button id="theme-toggle" class="link-btn" title="Switch theme" aria-label="Switch theme">☀️</button>
         </nav>
     </div>
 
@@ -140,11 +142,12 @@
                 <a href="https://developer.mozilla.org/en-US/docs/Web/API/EventSource">JavaScript
                 SSE EventSource API</a> to subscribe to real-time game events broadcast from the server hosted at <code>/api/games/${id}/events</code>.
             </p>
+            <p class="version-info">Version: <code id="commit-hash">loading…</code></p>
         </article>
     </section>
 
-    <script src="js/client.js?v=11"></script>
-    <script src="js/renderer.js?v=11"></script>
+    <script src="js/client.js?v=13"></script>
+    <script src="js/renderer.js?v=13"></script>
     <script>
         const goodSets = [
             {
@@ -184,7 +187,7 @@
                     const card = SetClient.parseCard(id);
                     const cell = document.createElement('div');
                     cell.className = 'example-card';
-                    cell.innerHTML = CardRenderer.render(card);
+                    cell.innerHTML = CardRenderer.render(card, false, { stripeSize: 6, stripeWidth: 2 });
                     trio.appendChild(cell);
                 }
                 const why = document.createElement('p');
@@ -197,6 +200,24 @@
         }
         renderExample(document.getElementById('good-examples'), goodSets);
         renderExample(document.getElementById('bad-examples'), badSets);
+
+        fetch('/api/version')
+            .then(r => r.json())
+            .then(v => {
+                const el = document.getElementById('commit-hash');
+                el.textContent = v.commitHash || 'unknown';
+                if (v.commitHash) {
+                    const link = document.createElement('a');
+                    link.href = `https://github.com/msr-central/setgame/commit/${v.commitHash}`;
+                    link.target = '_blank';
+                    link.textContent = v.commitHash.substring(0, 8);
+                    el.textContent = '';
+                    el.appendChild(link);
+                }
+            })
+            .catch(() => {
+                document.getElementById('commit-hash').textContent = 'unavailable';
+            });
     </script>
 </body>
 </html>

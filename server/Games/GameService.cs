@@ -13,6 +13,7 @@ namespace SetGameServer.Games;
 public class GameService
 {
     private readonly GarnetGameStore _store;
+    private readonly IBackupQueue _backup;
     private readonly Random _rng = new();
 
     // Per-game ping-fairness state. Players have varying network latency;
@@ -40,9 +41,10 @@ public class GameService
     private readonly Timer _inactivityTimer;
     private readonly Timer _gcTimer;
 
-    public GameService(GarnetGameStore store)
+    public GameService(GarnetGameStore store, IBackupQueue backup)
     {
         _store = store;
+        _backup = backup;
         _inactivityTimer = new Timer(_ => _ = SweepInactivePlayersAsync(),
             null, InactivitySweepMs, InactivitySweepMs);
         _gcTimer = new Timer(_ => _ = SweepStaleGamesAsync(),
@@ -53,6 +55,8 @@ public class GameService
     public static string Channel(string id) => $"game:{id}:events";
     private const string IndexKey = "games:index";
     private const string LeaderboardKey = "leaderboard:stats";
+    private static string ReplayKey(string id) => $"replay:{id}";
+    private const string ReplayIndexKey = "replays:index";
 
     public async Task<GameSummary> CreateAsync(string friendlyName)
     {
@@ -64,12 +68,14 @@ public class GameService
             await _store.SetJsonAsync(StateKey(id), state);
             await _store.SAddAsync(IndexKey, id);
         }
+        _backup.EnqueueGame(state);
         return ToSummary(state);
     }
 
     public async Task<List<GameSummary>> ListAsync()
     {
         var ids = await _store.SMembersAsync(IndexKey);
+        var replayIds = new HashSet<string>(await _store.SMembersAsync(ReplayIndexKey));
         var summaries = new List<GameSummary>(ids.Length);
         foreach (var id in ids)
         {
@@ -80,7 +86,7 @@ public class GameService
                 await _store.SRemAsync(IndexKey, id);
                 continue;
             }
-            summaries.Add(ToSummary(state));
+            summaries.Add(ToSummary(state, replayIds.Contains(id)));
         }
         return summaries
             .OrderByDescending(s => s.StartedAt)
@@ -242,6 +248,8 @@ public class GameService
                     {
                         await _store.DeleteAsync(StateKey(id));
                         await _store.SRemAsync(IndexKey, id);
+                        await _store.DeleteAsync(ReplayKey(id));
+                        await _store.SRemAsync(ReplayIndexKey, id);
                     }
                     DropInMemory(id);
                 }
@@ -518,7 +526,12 @@ public class GameService
 
                 // Record the winner the first (and only) time this game ends.
                 if (prevStatus == "active" && state.Status == "ended")
+                {
                     await UpdateLeaderboardAsync(state);
+                    await PersistReplayAsync(state);
+                }
+
+                _backup.EnqueueGame(state);
             }
             return state;
         }
@@ -542,10 +555,11 @@ public class GameService
         foreach (var w in winners)
         {
             stats[w.Id] = stats.TryGetValue(w.Id, out var e)
-                ? e with { PlayerName = w.Name, Wins = e.Wins + 1, Score = e.Score + opponents }
-                : new LeaderboardEntry(w.Id, w.Name, 1, opponents);
+                ? e with { PlayerName = w.Name, Wins = e.Wins + 1, Score = e.Score + opponents, LastReplayGameId = state.Id }
+                : new LeaderboardEntry(w.Id, w.Name, 1, opponents, state.Id);
         }
         await _store.SetJsonAsync(LeaderboardKey, stats);
+        _backup.EnqueueLeaderboard(stats);
     }
 
     public async Task<List<LeaderboardEntry>> GetLeaderboardAsync()
@@ -559,6 +573,79 @@ public class GameService
             .ToList();
     }
 
-    private static GameSummary ToSummary(GameState s)
-        => new(s.Id, s.Name, s.Players.Values.Count(p => p.Active), s.StartedAt, s.Status);
+    private static GameSummary ToSummary(GameState s, bool hasReplay = false)
+        => new(s.Id, s.Name, s.Players.Values.Count(p => p.Active), s.StartedAt, s.Status, hasReplay);
+
+    // ──────────────────── Replay persistence ────────────────────────────────
+
+    private object BuildExportObject(GameState s) => new
+    {
+        id = s.Id,
+        name = s.Name,
+        status = s.Status,
+        startedAt = s.StartedAt,
+        exportedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        playerCount = s.Players.Count,
+        initialDeck = s.InitialDeck,
+        players = s.Players.Values.Select(p => new
+        {
+            id = p.Id,
+            name = p.Name,
+            setsFound = p.SetsFound,
+        }),
+        moves = s.Moves,
+    };
+
+    /// <summary>Persists a replay snapshot immediately after a game ends.
+    /// Called inside the store lock from <see cref="MutateAsync"/>.</summary>
+    private async Task PersistReplayAsync(GameState state)
+    {
+        var json = _store.Serialize(BuildExportObject(state));
+        await _store.SetStringAsync(ReplayKey(state.Id), json);
+        await _store.SAddAsync(ReplayIndexKey, state.Id);
+    }
+
+    /// <summary>Returns the raw replay JSON for the given game. Falls back
+    /// to a live export when no persisted replay exists (in-progress or
+    /// legacy game).</summary>
+    public async Task<string?> GetReplayJsonAsync(string id)
+    {
+        var raw = await _store.GetStringAsync(ReplayKey(id));
+        if (raw != null) return raw;
+        // Fall back: build from current live state (in-progress or legacy)
+        var s = await GetAsync(id);
+        if (s == null) return null;
+        return _store.Serialize(BuildExportObject(s));
+    }
+
+    private sealed class ReplayMeta
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public long StartedAt { get; set; }
+        public int PlayerCount { get; set; }
+    }
+
+    /// <summary>Returns summary metadata for all persisted replays,
+    /// ordered newest-first.</summary>
+    public async Task<List<object>> GetReplaysAsync()
+    {
+        var ids = await _store.SMembersAsync(ReplayIndexKey);
+        var results = new List<ReplayMeta>(ids.Length);
+        foreach (var id in ids)
+        {
+            var meta = await _store.GetJsonAsync<ReplayMeta>(ReplayKey(id));
+            if (meta == null)
+            {
+                // Stale index entry — clean up.
+                await _store.SRemAsync(ReplayIndexKey, id);
+                continue;
+            }
+            results.Add(meta);
+        }
+        return results
+            .OrderByDescending(r => r.StartedAt)
+            .Select(r => (object)new { r.Id, r.Name, r.StartedAt, r.PlayerCount })
+            .ToList();
+    }
 }

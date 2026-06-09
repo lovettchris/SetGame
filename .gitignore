@@ -146,3 +146,4 @@ vite.config.ts.timestamp-*
 bin/
 obj/
 .vs/
+tests/test-results/

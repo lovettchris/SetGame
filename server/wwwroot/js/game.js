@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentState = null;
     let eventSource = null;
     let selectedIndices = [];
+    let lastBoardLength = 0;
     let pendingClear = false;
     let messageTimeout = null;
     let lastDealtIndices = [];
@@ -69,6 +70,66 @@ document.addEventListener('DOMContentLoaded', async () => {
     const FOUND_SET_HIGHLIGHT_MS = 1000;
     let pingTimer = null;
     const PING_INTERVAL_MS = 10000;
+
+    // ─── Dynamic layout sizing ────────────────────────────────────────────
+    // Compute --col-w so the board fits the viewport both horizontally and
+    // vertically, then set it on <html> so every CSS var(--col-w) consumer
+    // (board, toolbar, scoreboard, players) picks up the same value.
+    const CARD_ASPECT = 200 / 140; // height / width
+    const MAX_COL_W = 200;
+    const MIN_COL_W = 50;
+
+    function measureChromeHeight() {
+        // Measure actual vertical space consumed by everything above the board
+        const rect = boardEl.getBoundingClientRect();
+        return rect.top;
+    }
+
+    function updateColWidth() {
+        const cols = parseInt(document.body.style.getPropertyValue('--board-cols')) || 4;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // Detect landscape sidebar mode
+        const isLandscapeSidebar = window.matchMedia(
+            '(orientation: landscape) and (max-height: 540px)'
+        ).matches;
+
+        // Scale gap and pad based on the smaller dimension so they
+        // shrink aggressively on compact screens
+        const minDim = Math.min(vw, vh);
+        const gap = Math.max(2, Math.min(12, minDim * 0.01));
+        const pad = Math.max(4, Math.min(16, minDim * 0.015));
+
+        // Width budget: viewport minus padding and gaps, divided by columns
+        let availW = vw;
+        if (isLandscapeSidebar) availW -= 160; // sidebar + gap
+        const colFromWidth = (availW - 2 * pad - (cols - 1) * gap) / cols;
+
+        // Height budget: measure actual chrome above the board instead of
+        // guessing; subtract it plus board padding/gaps from viewport height
+        let availH = vh;
+        if (!isLandscapeSidebar) {
+            availH -= measureChromeHeight();
+        } else {
+            availH -= 12;
+        }
+        const colFromHeight = (availH - 2 * pad - 2 * gap) / (3 * CARD_ASPECT);
+
+        const colW = Math.max(MIN_COL_W, Math.min(MAX_COL_W, colFromWidth, colFromHeight));
+
+        // Set on document.body so inline styles override the body CSS rule's
+        // own --col-w declaration (inheritance from <html> would lose).
+        document.body.style.setProperty('--col-w', colW + 'px');
+        document.body.style.setProperty('--col-gap', gap + 'px');
+        document.body.style.setProperty('--board-pad', pad + 'px');
+    }
+
+    updateColWidth();
+    window.addEventListener('resize', updateColWidth);
+    window.addEventListener('resize', () => {
+        if (messageEl.classList.contains('visible')) positionMessage();
+    });
 
     await SetClient.loadMe();
     meEl.textContent = SetClient.me.name;
@@ -161,6 +222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             forceNextSparkleIds = null;
             lastDealtIndices = [];
             selectedIndices = [];
+            lastBoardLength = 0;
             pendingClear = false;
             appliedHintCount = 0;
             lastShownBroadcast = bc.version;
@@ -170,6 +232,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             boardEl.style.gridTemplateColumns = 'repeat(4, var(--col-w))';
             boardEl.style.gridTemplateRows = 'repeat(3, auto)';
             boardEl.style.gridAutoFlow = 'row';
+            document.body.style.setProperty('--board-cols', '4');
+            updateColWidth();
             for (let i = 0; i < 12; i++) {
                 const slot = document.createElement('div');
                 slot.className = 'card blank';
@@ -272,6 +336,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (lastDealtIndices.length > 0) {
             selectedIndices = selectedIndices.filter(i => !lastDealtIndices.includes(i));
         }
+        // When the board collapses (extra column removed after a set is
+        // found), cards from the extras slide into holes in the base grid
+        // so indices no longer correspond to the same cards — clear the
+        // selection entirely to avoid stale highlights.
+        const boardLength = (state.board || []).length;
+        if (boardLength < lastBoardLength) {
+            selectedIndices = [];
+            pendingClear = false;
+        }
+        lastBoardLength = boardLength;
         // Hint reveals are merged into the local selection ONCE per
         // reveal: when the server's hintIndices grows, append the newly
         // revealed cards to whatever the user currently has selected.
@@ -455,6 +529,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         boardEl.style.gridTemplateColumns = `repeat(${cols}, var(--col-w))`;
         boardEl.style.gridTemplateRows = 'repeat(3, auto)';
         boardEl.style.gridAutoFlow = 'row';
+        document.body.style.setProperty('--board-cols', String(cols));
+        updateColWidth();
 
         function placeCell(el, index) {
             let row, col;
@@ -590,9 +666,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('stat-deck').textContent = currentState.deckRemaining;
     }
 
+    function positionMessage() {
+        const r = boardEl.getBoundingClientRect();
+        messageEl.style.left = (r.left + r.width / 2) + 'px';
+        messageEl.style.top = (r.top + r.height / 2) + 'px';
+        messageEl.style.transform = 'translate(-50%, -50%)';
+        messageEl.style.maxWidth = (r.width * 0.9) + 'px';
+    }
+
     function showMessage(text, type) {
         messageEl.textContent = text;
         messageEl.className = `message ${type}`;
+        positionMessage();
         messageEl.classList.add('visible');
         if (messageTimeout) clearTimeout(messageTimeout);
         messageTimeout = null;
@@ -621,6 +706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <p>Your sets: <strong>${me ? me.setsFound : 0}</strong></p>
                 <p>Time: <strong>${timeStr}</strong></p>
                 <button id="play-again-btn">New Round</button>
+                <button id="replay-btn" class="ghost">▶ Watch Replay</button>
                 <button id="export-btn" class="ghost">Export Game</button>
                 <button id="back-btn" class="ghost">Back to Lobby</button>
             </div>
@@ -629,6 +715,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('play-again-btn').addEventListener('click', async () => {
             overlay.remove();
             await SetClient.restart(currentGameId);
+        });
+        document.getElementById('replay-btn').addEventListener('click', () => {
+            window.location.href = `/replay.html?game=${encodeURIComponent(currentGameId)}`;
         });
         document.getElementById('export-btn').addEventListener('click', async () => {
             try { await SetClient.exportGame(currentGameId, currentState.name); }

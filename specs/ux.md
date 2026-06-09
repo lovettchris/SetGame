@@ -46,30 +46,60 @@
 - Each card displays 1, 2, or 3 shapes arranged vertically and centered.
 - Three shadings:
   - **Solid**: filled with the card's color.
-  - **Striped**: filled with a horizontal stripe pattern using `crispEdges` rendering for pixel-sharp lines. Pattern is 4×4 with 1px stripes.
+  - **Striped**: filled with a horizontal stripe pattern using `crispEdges`
+    rendering for pixel-sharp lines. Default pattern is 4×4 with 1px stripes.
+    The renderer accepts optional `stripeSize` / `stripeWidth` overrides for
+    contexts where cards are rendered at a smaller scale (e.g. the help page
+    uses 6×6 / 2px so stripes remain visible at ~50 % zoom).
   - **Open**: transparent fill with a colored outline.
 - Three colors: **red** (`#e74c3c`), **green** (`#27ae60`), **purple** (`#6a3dba` — shifted slightly blue).
 - Cards have rounded corners and a white background.
 
 ## Layout
 
-- Cards are displayed in a **4-column × 3-row** base grid (12 cards) at
-  a **fixed column width** so the grid layout is independent of how
-  many extras are present.
+- The game page is locked to the viewport height (`100dvh`, no scrolling).
+  The board, toolbar, scoreboard, and players panel all shrink responsively
+  so everything stays on screen at any window size.
+- A JavaScript layout engine (`updateColWidth`) runs on every `resize` event
+  and whenever the column count changes. It computes `--col-w` as the
+  minimum of a **width budget** (viewport width ÷ current column count,
+  minus gaps and padding) and a **height budget** (viewport height minus
+  the measured chrome height above the board, divided across 3 card rows
+  at a 140 : 200 aspect ratio). The result is clamped between 50 px and
+  200 px and set as an inline style on `<body>`, along with `--col-gap`
+  and `--board-pad` which also scale with the smaller viewport dimension
+  (minimums as low as 2 px / 4 px on compact screens).
+- All chrome elements (topbar, toolbar, scoreboard, players panel) use
+  `max-width: var(--layout-w)` where `--layout-w` is derived from
+  `--board-cols`, `--col-w`, `--col-gap`, and `--board-pad`, so everything
+  stays aligned and centered together.
+- Cards are displayed in a **4-column × 3-row** base grid (12 cards).
+  The board's width is driven by `--board-cols` (a CSS custom property set
+  by JS, default 4) so it is only as wide as its current column count and
+  is **centered** on the page via `margin: auto`. There is no reserved
+  space for future columns — the board simply grows and recenters when
+  extra columns are dealt, and shrinks back when they collapse.
 - When **deal-3** grows the board, the new 3 cards are appended as a
-  **new rightmost column** (column 5, then column 6 if a second
-  deal-3 fires). Cards 0..11 in the base 4×3 grid keep their **exact
-  pixel position and size** — they do not reflow or shrink.
+  **new rightmost column** (column 5, then column 6, up to column 7).
+  The JS updates `--board-cols` and reruns the layout engine so the board
+  recenters and the column width recalculates to fit the wider grid.
 - When the board **collapses** (a set is found while the board has
   >12 cards), the rule is strict: **every card in the base 4×3 layout
   must remain in its original location**. The only cards permitted to
   move are cards from the right-most extras column, which slide into
   any holes left by the matched set in the base grid. Once the holes
-  are filled, the now-empty extras column is removed.
+  are filled, the now-empty extras column is removed, `--board-cols`
+  decreases, and the layout engine recenters the narrower board.
 - The slide animation is rendered with a FLIP transition so users can
   see exactly which card moved into which hole.
-- On narrow viewports (≤600px) the grid falls back to 3 columns for
+- On narrow viewports (≤600 px) the grid falls back to 3 columns for
   legibility.
+- On **landscape phones / short viewports** (orientation: landscape,
+  max-height: 540 px) the topbar is hidden and the game switches to a
+  two-column layout: a slim sidebar (toolbar, scoreboard, players)
+  on the left and the board filling the right. The layout engine
+  detects this mode and subtracts the sidebar width from the available
+  width budget.
 
 ## Selection
 
@@ -86,6 +116,11 @@
   different cards after a reveal, the old hint cards stay gone — they
   only come back if a new hint round reaches quorum (which again wipes
   your selection down to just the revealed cards).
+- **Board collapse clears selection.** When the board shrinks (an extra
+  column is removed after a set is found in an expanded board), cards
+  slide into new positions and indices no longer correspond to the same
+  cards. The local selection is cleared entirely to prevent stale
+  highlights pointing at the wrong cards.
 - Clicking a card toggles its selection. Selected cards get a blue highlight border and shadow.
 - Clicking outside the cards (on the page background) clears all selections.
 - When 3 cards are selected, the game automatically checks if they form a valid set.
