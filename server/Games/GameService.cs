@@ -30,6 +30,11 @@ public class GameService
     // The inactivity sweeper uses this to mark silent players inactive
     // without re-broadcasting state on every ping.
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, long>> _lastPingAt = new();
+    // Per-game count of currently-connected spectator SSE streams. Tracked
+    // in-process; overwritten onto state.SpectatorCount before every
+    // persist/publish so every client sees the same number. Resets to
+    // zero on server restart and rebuilds as spectators reconnect.
+    private readonly ConcurrentDictionary<string, int> _spectatorCounts = new();
     private const int MinWindowMs = 50;
     private const int MaxWindowMs = 500;
     private const int DefaultWindowMs = 200;
@@ -97,7 +102,13 @@ public class GameService
     public async Task<GameState?> GetAsync(string id)
     {
         var s = await _store.GetJsonAsync<GameState>(StateKey(id));
-        if (s != null) BackfillLegacyExportFields(s);
+        if (s != null)
+        {
+            BackfillLegacyExportFields(s);
+            // The persisted SpectatorCount may be stale across server
+            // restarts; the in-process counter is the source of truth.
+            s.SpectatorCount = _spectatorCounts.GetValueOrDefault(id, 0);
+        }
         return s;
     }
 
@@ -147,6 +158,66 @@ public class GameService
         await MutateAsync(id, state =>
         {
             SetGameEngine.RemovePlayer(state, playerId);
+            return true;
+        });
+    }
+
+    /// <summary>Demote an active player to spectator without removing
+    /// their row from the Players panel. Their score is preserved; their
+    /// row is tagged <c>👁 WATCHING</c> instead of <c>LEFT</c>; their hint
+    /// vote (if any) is dropped so the remaining table can still reach
+    /// quorum. Spectator count is bumped on the next /events reconnect
+    /// from the client side — the demotion itself doesn't touch the
+    /// counter (the client opens a new SSE with ?spectate=1).</summary>
+    public async Task<GameState?> DemoteToSpectatorAsync(string id, string playerId)
+    {
+        if (_pings.TryGetValue(id, out var perPlayer))
+            perPlayer.TryRemove(playerId, out _);
+        if (_lastPingAt.TryGetValue(id, out var seen))
+            seen.TryRemove(playerId, out _);
+
+        return await MutateAsync(id, state =>
+        {
+            SetGameEngine.DemoteToSpectator(state, playerId);
+            return true;
+        });
+    }
+
+    /// <summary>True when the caller appears in <see cref="GameState.Players"/>
+    /// regardless of active/spectating flag — used to gate the action
+    /// endpoints (select/hint/deal3/restart) so a pure spectator's POST
+    /// returns 403 instead of being silently accepted.</summary>
+    public async Task<bool> IsParticipantAsync(string id, string playerId)
+    {
+        var s = await _store.GetJsonAsync<GameState>(StateKey(id));
+        return s != null && s.Players.ContainsKey(playerId);
+    }
+
+    /// <summary>Increment the spectator count for a game and broadcast a
+    /// state push so every connected client sees the new badge. Called
+    /// when an SSE stream opens with ?spectate=1.</summary>
+    public async Task IncrementSpectatorAsync(string id)
+    {
+        var newCount = _spectatorCounts.AddOrUpdate(id, 1, (_, prev) => prev + 1);
+        await MutateAsync(id, state =>
+        {
+            if (state.SpectatorCount == newCount) return false;
+            state.SpectatorCount = newCount;
+            state.Version++;
+            return true;
+        });
+    }
+
+    /// <summary>Decrement the spectator count for a game and broadcast.
+    /// Called when an SSE stream with ?spectate=1 closes.</summary>
+    public async Task DecrementSpectatorAsync(string id)
+    {
+        var newCount = _spectatorCounts.AddOrUpdate(id, 0, (_, prev) => Math.Max(0, prev - 1));
+        await MutateAsync(id, state =>
+        {
+            if (state.SpectatorCount == newCount) return false;
+            state.SpectatorCount = newCount;
+            state.Version++;
             return true;
         });
     }
@@ -266,6 +337,7 @@ public class GameService
         _races.TryRemove(id, out _);
         _pings.TryRemove(id, out _);
         _lastPingAt.TryRemove(id, out _);
+        _spectatorCounts.TryRemove(id, out _);
     }
 
     private int CurrentMaxPing(string gameId)
@@ -516,6 +588,10 @@ public class GameService
             var state = await _store.GetJsonAsync<GameState>(StateKey(id));
             if (state == null) return null;
             BackfillLegacyExportFields(state);
+            // Always reflect the in-process spectator counter so every
+            // broadcast carries an authoritative count, regardless of
+            // what was persisted before a server restart.
+            state.SpectatorCount = _spectatorCounts.GetValueOrDefault(id, 0);
             var prevStatus = state.Status;
             var persist = mutate(state);
             if (persist)
@@ -573,8 +649,9 @@ public class GameService
             .ToList();
     }
 
-    private static GameSummary ToSummary(GameState s, bool hasReplay = false)
-        => new(s.Id, s.Name, s.Players.Values.Count(p => p.Active), s.StartedAt, s.Status, hasReplay);
+    private GameSummary ToSummary(GameState s, bool hasReplay = false)
+        => new(s.Id, s.Name, s.Players.Values.Count(p => p.Active), s.StartedAt, s.Status, hasReplay,
+               _spectatorCounts.GetValueOrDefault(s.Id, 0));
 
     // ──────────────────── Replay persistence ────────────────────────────────
 

@@ -41,14 +41,18 @@ public static class SetGameEngine
         if (s.Players.TryGetValue(playerId, out var existing))
         {
             // Rejoin — keep score/sets/penalties; reactivate; refresh name.
+            // Promotion from spectator → player is the same code path.
             var wasInactive = !existing.Active;
+            var wasSpectating = existing.Spectating;
             existing.Active = true;
+            existing.Spectating = false;
             if (!string.IsNullOrEmpty(name)) existing.Name = name;
             if (wasInactive)
             {
                 s.LastDealtIndices.Clear();
                 s.Version++;
-                Announce(s, $"{existing.Name} rejoined the game", "info");
+                var verb = wasSpectating ? "joined the game" : "rejoined the game";
+                Announce(s, $"{existing.Name} {verb}", "info");
             }
         }
         else
@@ -67,6 +71,7 @@ public static class SetGameEngine
         // remaining (active) players can still reach quorum.
         if (!s.Players.TryGetValue(playerId, out var p) || !p.Active) return;
         p.Active = false;
+        p.Spectating = false;
         s.HintRequests.Remove(playerId);
         s.LastDealtIndices.Clear();
         s.Version++;
@@ -74,6 +79,24 @@ public static class SetGameEngine
         // Departure may have satisfied the threshold for the remaining
         // active players — try to reveal so nobody is stuck waiting on a
         // ghost.
+        TryRevealHint(s, Array.Empty<int>());
+    }
+
+    /// <summary>Demote a player to spectator: same as <see cref="RemovePlayer"/>
+    /// for hint/active bookkeeping, but tagged <see cref="PlayerState.Spectating"/>
+    /// so clients can render the row as "👁 WATCHING" instead of "LEFT".
+    /// Their score is preserved in case they switch back to playing.</summary>
+    public static void DemoteToSpectator(GameState s, string playerId)
+    {
+        if (!s.Players.TryGetValue(playerId, out var p) || !p.Active) return;
+        p.Active = false;
+        p.Spectating = true;
+        s.HintRequests.Remove(playerId);
+        s.LastDealtIndices.Clear();
+        s.Version++;
+        Announce(s, $"{p.Name} is now spectating", "info");
+        // Their departure may have satisfied the hint quorum for the
+        // remaining active players.
         TryRevealHint(s, Array.Empty<int>());
     }
 

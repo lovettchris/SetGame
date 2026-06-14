@@ -138,9 +138,37 @@ app.MapPost("/api/games/{id}/leave", async (string id, HttpContext ctx, GameServ
     return Results.Ok();
 });
 
+// Demote an active player to spectator: their row stays in the Players
+// panel tagged "WATCHING" instead of "LEFT", their score is preserved,
+// and their hint vote (if any) is dropped. The client follows up by
+// reopening the SSE stream with ?spectate=1, which bumps the
+// spectator count.
+app.MapPost("/api/games/{id}/spectate", async (string id, HttpContext ctx, GameService svc) =>
+{
+    var me = PlayerIdentity.From(ctx);
+    var s = await svc.DemoteToSpectatorAsync(id, me.Id);
+    return s == null ? Results.NotFound() : Results.Json(s);
+});
+
+// Helper used by every action endpoint to keep spectators from
+// mutating game state via direct API calls. Pure spectators (those who
+// never called /join) are not in state.Players, so any /select, /hint,
+// /deal3 or /restart from them returns 403 with a clear error body.
+static async Task<IResult?> EnsureParticipant(GameService svc, string id, string playerId)
+{
+    if (await svc.IsParticipantAsync(id, playerId)) return null;
+    return Results.Json(new
+    {
+        error = "spectator",
+        message = "Spectators can't play. Click Join as Player to play.",
+    }, statusCode: 403);
+}
+
 app.MapPost("/api/games/{id}/select", async (string id, SelectRequest body, HttpContext ctx, GameService svc) =>
 {
     var me = PlayerIdentity.From(ctx);
+    var guard = await EnsureParticipant(svc, id, me.Id);
+    if (guard != null) return guard;
     var (state, outcome) = await svc.SubmitAsync(id, me.Id,
         body?.Indices ?? Array.Empty<int>());
     return state == null ? Results.NotFound() : Results.Json(new { state, outcome });
@@ -152,10 +180,12 @@ app.MapGet("/api/ping", () => Results.Ok(new { ok = true }));
 
 // Records a player's most recently measured RTT for a game so the
 // server can size the race-fairness window to match the slowest
-// active connection.
+// active connection. Silently no-ops for spectators — their latency
+// must not size the race window.
 app.MapPost("/api/games/{id}/ping", async (string id, PingRequest body, HttpContext ctx, GameService svc) =>
 {
     var me = PlayerIdentity.From(ctx);
+    if (!await svc.IsParticipantAsync(id, me.Id)) return Results.Ok();
     await svc.RecordPingAsync(id, me.Id, body?.PingMs ?? 0);
     return Results.Ok();
 });
@@ -163,18 +193,26 @@ app.MapPost("/api/games/{id}/ping", async (string id, PingRequest body, HttpCont
 app.MapPost("/api/games/{id}/hint", async (string id, HintRequest body, HttpContext ctx, GameService svc) =>
 {
     var me = PlayerIdentity.From(ctx);
+    var guard = await EnsureParticipant(svc, id, me.Id);
+    if (guard != null) return guard;
     var (state, outcome) = await svc.HintAsync(id, me.Id, body?.Selection ?? Array.Empty<int>());
     return state == null ? Results.NotFound() : Results.Json(new { state, outcome });
 });
 
-app.MapPost("/api/games/{id}/deal3", async (string id, GameService svc) =>
+app.MapPost("/api/games/{id}/deal3", async (string id, HttpContext ctx, GameService svc) =>
 {
+    var me = PlayerIdentity.From(ctx);
+    var guard = await EnsureParticipant(svc, id, me.Id);
+    if (guard != null) return guard;
     var (state, outcome) = await svc.DealAsync(id);
     return state == null ? Results.NotFound() : Results.Json(new { state, outcome });
 });
 
-app.MapPost("/api/games/{id}/restart", async (string id, GameService svc) =>
+app.MapPost("/api/games/{id}/restart", async (string id, HttpContext ctx, GameService svc) =>
 {
+    var me = PlayerIdentity.From(ctx);
+    var guard = await EnsureParticipant(svc, id, me.Id);
+    if (guard != null) return guard;
     var s = await svc.NewRoundAsync(id);
     return s == null ? Results.NotFound() : Results.Json(s);
 });
@@ -217,39 +255,59 @@ app.MapGet("/api/games/{id}/replay", async (string id, GameService svc) =>
 });
 
 // Server-Sent Events: stream pub/sub messages for one game to one client.
+// When opened with ?spectate=1 the connection is counted as a spectator,
+// which increments state.SpectatorCount and broadcasts a state push so
+// every other connected client sees the new "👁 N watching" badge.
 app.MapGet("/api/games/{id}/events", async (string id, HttpContext ctx,
     GameService svc, GarnetSubscriber sub) =>
 {
     var initial = await svc.GetAsync(id);
     if (initial == null) { ctx.Response.StatusCode = 404; return; }
 
+    var isSpectator = ctx.Request.Query["spectate"] == "1";
+
     ctx.Response.Headers.ContentType = "text/event-stream";
     ctx.Response.Headers.CacheControl = "no-cache";
     ctx.Response.Headers["X-Accel-Buffering"] = "no";
 
-    var json = JsonSerializer.Serialize(initial, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-    await WriteSseAsync(ctx.Response, "state", json);
-
-    await using var subscription = await sub.SubscribeAsync(GameService.Channel(id));
-    using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(20));
-
-    var heartbeatTask = Task.Run(async () =>
-    {
-        try
-        {
-            while (await heartbeat.WaitForNextTickAsync(ctx.RequestAborted))
-                await ctx.Response.WriteAsync(": keep-alive\n\n", ctx.RequestAborted);
-        }
-        catch (OperationCanceledException) { }
-    });
-
+    if (isSpectator) await svc.IncrementSpectatorAsync(id);
     try
     {
-        await foreach (var payload in subscription.Listener.Reader.ReadAllAsync(ctx.RequestAborted))
-            await WriteSseAsync(ctx.Response, "state", payload);
+        // Re-fetch so the initial snapshot reflects the bump from
+        // IncrementSpectatorAsync above (otherwise the spectator who
+        // just connected would briefly see the pre-bump count).
+        var snapshot = isSpectator ? (await svc.GetAsync(id)) ?? initial : initial;
+        var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        await WriteSseAsync(ctx.Response, "state", json);
+
+        await using var subscription = await sub.SubscribeAsync(GameService.Channel(id));
+        using var heartbeat = new PeriodicTimer(TimeSpan.FromSeconds(20));
+
+        var heartbeatTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (await heartbeat.WaitForNextTickAsync(ctx.RequestAborted))
+                    await ctx.Response.WriteAsync(": keep-alive\n\n", ctx.RequestAborted);
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        try
+        {
+            await foreach (var payload in subscription.Listener.Reader.ReadAllAsync(ctx.RequestAborted))
+                await WriteSseAsync(ctx.Response, "state", payload);
+        }
+        catch (OperationCanceledException) { }
+        finally { try { await heartbeatTask; } catch { } }
     }
-    catch (OperationCanceledException) { }
-    finally { try { await heartbeatTask; } catch { } }
+    finally
+    {
+        if (isSpectator)
+        {
+            try { await svc.DecrementSpectatorAsync(id); } catch { /* shutdown race */ }
+        }
+    }
 });
 
 // Static SPA served from wwwroot (the ASP.NET Core convention). The

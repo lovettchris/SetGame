@@ -77,6 +77,15 @@ const SetClient = {
         return r.json();
     },
 
+    /** Fetch the current full game state without joining as a player.
+     *  Used by spectators so they can render the initial board without
+     *  appearing in state.Players. */
+    async getGame(id) {
+        const r = await this._apiFetch(`/api/games/${id}`);
+        if (!r.ok) throw new Error('Failed to load game');
+        return r.json();
+    },
+
     async joinGame(id) {
         const r = await this._apiFetch(`/api/games/${id}/join`, { method: 'POST' });
         if (!r.ok) throw new Error('Failed to join game');
@@ -85,6 +94,13 @@ const SetClient = {
 
     async leaveGame(id) {
         try { await this._apiFetch(`/api/games/${id}/leave`, { method: 'POST' }); } catch {}
+    },
+
+    /** Demote an active player to spectator without removing their row
+     *  from the Players panel — score is preserved, they're tagged
+     *  WATCHING instead of LEFT. */
+    async spectateGame(id) {
+        try { await this._apiFetch(`/api/games/${id}/spectate`, { method: 'POST' }); } catch {}
     },
 
     async submitSelection(id, indices) {
@@ -168,9 +184,12 @@ const SetClient = {
     },
 
     /** Open an EventSource for the given game; calls onState(stateObject)
-     *  for every "state" event, including the initial one. */
-    openEvents(id, onState) {
-        const es = new EventSource(`/api/games/${id}/events`);
+     *  for every "state" event, including the initial one.
+     *  When opts.spectate is true the connection is opened with ?spectate=1
+     *  so the server counts it toward the spectator badge. */
+    openEvents(id, onState, opts) {
+        const qs = opts && opts.spectate ? '?spectate=1' : '';
+        const es = new EventSource(`/api/games/${id}/events${qs}`);
         es.addEventListener('state', e => {
             try { onState(JSON.parse(e.data)); } catch (err) { console.error(err); }
         });

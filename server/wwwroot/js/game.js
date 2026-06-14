@@ -5,18 +5,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     const meEl = document.getElementById('me');
     const boardEl = document.getElementById('board');
     const playersEl = document.getElementById('players');
+    const watchingFooterEl = document.getElementById('watching-footer');
     const messageEl = document.getElementById('message');
     const gameNameEl = document.getElementById('game-name');
     const leaveBtn = document.getElementById('leave-btn');
     const hintBtn = document.getElementById('hint-btn');
     const hintBadge = document.getElementById('hint-badge');
+    const modeChipEl = document.getElementById('mode-chip');
+    const modeChipIcon = document.getElementById('mode-chip-icon');
+    const modeChipText = document.getElementById('mode-chip-text');
+    const modeSwitchBtn = document.getElementById('mode-switch-btn');
+    const modeAnnouncer = document.getElementById('mode-announcer');
+    const spectatorWatermark = document.getElementById('spectator-watermark');
+    const statSetsWrap = document.getElementById('stat-sets-wrap');
 
     const params = new URLSearchParams(window.location.search);
     const currentGameId = params.get('id');
+    // Spectator mode: page joined with ?spectate=1. The user receives
+    // every SSE state push but never appears in state.Players, can't
+    // submit sets / vote on hints / deal-3 / restart, and never reports
+    // ping. The mode chip + watermark + cards-not-clickable all signal
+    // this independently (the "three signals" rule).
+    const isSpectator = params.get('spectate') === '1';
     if (!currentGameId) {
         window.location.href = '/';
         return;
     }
+
+    if (isSpectator) {
+        document.body.classList.add('spectator-mode');
+        spectatorWatermark.hidden = false;
+        // The "Your Sets" stat is always 0 for spectators — hide it
+        // entirely so it doesn't add visual noise.
+        if (statSetsWrap) statSetsWrap.style.display = 'none';
+    }
+
+    // Click-into-void: spectators who click a card get a one-line toast
+    // explaining the mode (rate-limited to 3 per session to avoid nag).
+    let spectatorClickToasts = 0;
 
     let currentState = null;
     let eventSource = null;
@@ -136,46 +162,148 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ─── Game lifecycle ───────────────────────────────────────────────────
     try {
-        const initial = await SetClient.joinGame(currentGameId);
-        applyState(initial);
+        if (isSpectator) {
+            // Spectators do NOT call /join. Pull the initial snapshot
+            // directly and rely on the SSE stream for live updates.
+            const initial = await SetClient.getGame(currentGameId);
+            applyState(initial);
+        } else {
+            const initial = await SetClient.joinGame(currentGameId);
+            applyState(initial);
+        }
     } catch {
         // Game vanished — bounce back to the lobby.
         window.location.href = '/';
         return;
     }
-    eventSource = SetClient.openEvents(currentGameId, applyState);
+    eventSource = SetClient.openEvents(currentGameId, applyState, { spectate: isSpectator });
 
-    // Kick off ping measurement immediately, then every 10s. Reporting
-    // it back to the server lets the server size its race-fairness
-    // window so the slowest player still has time to submit.
+    // Spectators don't ping — their latency must not enlarge the
+    // server's race-fairness window for actual players.
     async function pingNow() {
+        if (isSpectator) return;
         const rtt = await SetClient.measurePing();
         if (rtt != null) {
             await SetClient.reportPing(currentGameId, rtt);
         }
     }
-    pingNow();
-    pingTimer = setInterval(pingNow, PING_INTERVAL_MS);
+    if (!isSpectator) {
+        pingNow();
+        pingTimer = setInterval(pingNow, PING_INTERVAL_MS);
+    }
 
     async function leaveGame() {
         if (eventSource) { eventSource.close(); eventSource = null; }
         if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
-        try { await SetClient.leaveGame(currentGameId); } catch {}
+        // Spectators don't have a /join record on the server, so /leave
+        // would be a no-op — skip the network round-trip.
+        if (!isSpectator) {
+            try { await SetClient.leaveGame(currentGameId); } catch {}
+        }
         window.location.href = '/';
     }
 
     leaveBtn.addEventListener('click', leaveGame);
+    // Two-label pattern (mirrors .mode-switch-long / .mode-switch-short): the
+    // long variant is the friendly full phrase; the short variant is what we
+    // collapse to on phones so the chip + this button fit on one toolbar row.
+    const leaveLong = isSpectator ? '← Back to Lobby' : '← Leave Game';
+    const leaveShort = isSpectator ? '← Lobby' : '← Leave';
+    leaveBtn.innerHTML =
+        `<span class="leave-btn-long">${leaveLong}</span>` +
+        `<span class="leave-btn-short" aria-hidden="true">${leaveShort}</span>`;
+    leaveBtn.setAttribute('aria-label', isSpectator ? 'Back to Lobby' : 'Leave Game');
 
-    // Auto-leave when navigating away (back button, tab close, etc.)
+    // Auto-leave when navigating away (back button, tab close, etc.).
+    // Skipped for spectators — they only need their SSE to close, which
+    // happens automatically.
     window.addEventListener('pagehide', () => {
-        if (currentGameId) {
+        if (currentGameId && !isSpectator) {
             navigator.sendBeacon(`/api/games/${currentGameId}/leave`);
         }
+    });
+
+    // ─── Mode chip & one-click mode switch ────────────────────────────────
+    function renderModeChip() {
+        modeChipEl.hidden = false;
+        if (isSpectator) {
+            modeChipIcon.textContent = '👁';
+            modeChipText.innerHTML = `<span class="mode-chip-prefix">Spectating as </span><strong>${escapeHtml(SetClient.me.name)}</strong>`;
+            modeChipEl.classList.add('mode-spectating');
+            modeChipEl.classList.remove('mode-playing');
+            modeSwitchBtn.innerHTML = '<span class="mode-switch-long">Join as player</span><span class="mode-switch-short" aria-hidden="true">Join</span>';
+            modeSwitchBtn.title = 'Switch from spectating to playing';
+            modeSwitchBtn.setAttribute('aria-label', 'Join as player');
+        } else {
+            modeChipIcon.textContent = '🟢';
+            modeChipText.innerHTML = `<span class="mode-chip-prefix">Playing as </span><strong>${escapeHtml(SetClient.me.name)}</strong>`;
+            modeChipEl.classList.add('mode-playing');
+            modeChipEl.classList.remove('mode-spectating');
+            modeSwitchBtn.innerHTML = '<span class="mode-switch-long">Switch to spectating</span><span class="mode-switch-short" aria-hidden="true">Watch</span>';
+            modeSwitchBtn.title = 'Stop playing and just watch';
+            modeSwitchBtn.setAttribute('aria-label', 'Switch to spectating');
+        }
+    }
+    renderModeChip();
+    announceMode();
+
+    function announceMode() {
+        const gameName = (currentState && currentState.name) || 'this game';
+        modeAnnouncer.textContent = isSpectator
+            ? `You are spectating ${gameName}.`
+            : `You are now playing as ${SetClient.me.name}.`;
+    }
+
+    async function switchMode() {
+        // The mode-switch is implemented as a page reload that just
+        // flips the ?spectate=1 query param. Game state is server-
+        // authoritative so the round-trip is instant and lossless:
+        // identity, score and pingMs are all preserved server-side.
+        modeSwitchBtn.disabled = true;
+        try {
+            if (isSpectator) {
+                // Spectator → Player: /join (also reactivates a
+                // previously-spectating or -left row, preserving score).
+                await SetClient.joinGame(currentGameId);
+                if (eventSource) { eventSource.close(); eventSource = null; }
+                window.location.href =
+                    `/game.html?id=${encodeURIComponent(currentGameId)}`;
+            } else {
+                // Player → Spectator: /spectate (tags row as WATCHING).
+                if (eventSource) { eventSource.close(); eventSource = null; }
+                if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+                await SetClient.spectateGame(currentGameId);
+                window.location.href =
+                    `/game.html?id=${encodeURIComponent(currentGameId)}&spectate=1`;
+            }
+        } catch (err) {
+            console.warn('Mode switch failed', err);
+            modeSwitchBtn.disabled = false;
+        }
+    }
+    modeSwitchBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        switchMode();
+    });
+
+    // Keyboard shortcut: S toggles spectator ↔ player. Ignored while a
+    // text input is focused so it doesn't fire mid-typing.
+    document.addEventListener('keydown', e => {
+        if (e.key !== 's' && e.key !== 'S') return;
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+        e.preventDefault();
+        switchMode();
     });
 
 
     hintBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (isSpectator) {
+            showSpectatorBlocked();
+            return;
+        }
         if (hintBtn.disabled || hintInFlight || Date.now() < dealAnimUntil) return;
         hintInFlight = true;
         renderHintButton();
@@ -188,6 +316,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderHintButton();
         }
     });
+    if (isSpectator) {
+        // Keep the button slot in the toolbar layout so things don't
+        // reflow, but render it as a disabled placeholder so spectators
+        // see there is a hint feature they're opting out of.
+        hintBtn.disabled = true;
+        hintBtn.title = 'Spectators can\u2019t vote on hints';
+        hintBtn.style.opacity = '0.45';
+    }
+
+    function showSpectatorBlocked() {
+        if (spectatorClickToasts >= 3) return;
+        spectatorClickToasts++;
+        showMessage(
+            'You\u2019re spectating \u2014 click \u201CJoin as player\u201D to play.',
+            'warning');
+    }
 
     document.addEventListener('click', (e) => {
         if (!messageEl.contains(e.target)) {
@@ -409,7 +553,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // connected client needs to reannounce itself. We also catch the
         // less-common case where the server lost our entry for some
         // other reason (e.g. an explicit kick down the line).
-        if (state.status === 'active'
+        // Spectators are NEVER auto-rejoined — they're observers by choice.
+        if (!isSpectator
+            && state.status === 'active'
             && SetClient.me
             && !state.players[SetClient.me.id]
             && !rejoiningInFlight) {
@@ -471,6 +617,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function onCardClick(index) {
         if (!currentState) return;
+        if (isSpectator) {
+            showSpectatorBlocked();
+            return;
+        }
         clearMessage();
         if (pendingClear) {
             selectedIndices = [];
@@ -643,21 +793,79 @@ document.addEventListener('DOMContentLoaded', async () => {
         for (const p of sorted) {
             const row = document.createElement('div');
             const classes = ['player'];
-            if (p.id === SetClient.me.id) classes.push('player-me');
-            if (p.active === false) classes.push('player-inactive');
+            // Don't highlight the local-user row when spectating —
+            // spectators aren't playing, even if they're in state.Players
+            // (e.g. after they switched modes from player to spectator).
+            if (!isSpectator && p.id === SetClient.me.id) classes.push('player-me');
+            // Three distinct row states (see specs/ux.md "Spectator Mode"):
+            //   Active                                   → no extra class
+            //   Inactive + Spectating=true (watching)    → player-spectating
+            //   Inactive + Spectating=false (left)       → player-inactive
+            let tagHtml = '';
+            let tooltip = '';
+            if (p.active === false) {
+                if (p.spectating) {
+                    classes.push('player-spectating');
+                    tagHtml = ' <span class="player-tag player-tag-spectating" title="Still here but not playing — score preserved">\u{1F441} WATCHING</span>';
+                    tooltip = 'Currently spectating';
+                } else {
+                    classes.push('player-inactive');
+                    tagHtml = ' <span class="player-tag" title="Left the game — row kept in case they rejoin">LEFT</span>';
+                    tooltip = 'Left the game';
+                }
+            }
             row.className = classes.join(' ');
+            if (tooltip) row.title = tooltip;
             if (sparkleSet.has(p.id)) row.classList.add('sparkle');
-            const inactiveTag = p.active === false ? ' <span class="player-tag">left</span>' : '';
             const pingTag = (p.pingMs && p.active !== false)
                 ? ` <span class="player-ping" title="round-trip time to server">${p.pingMs} ms</span>`
                 : '';
             row.innerHTML = `
-                <span class="player-name">${escapeHtml(p.name)}${inactiveTag}</span>
+                <span class="player-name">${escapeHtml(p.name)}${tagHtml}</span>
                 <span class="player-score">${p.setsFound}</span>
                 <span class="player-sets">sets</span>${pingTag}
             `;
             playersEl.appendChild(row);
         }
+        renderWatchingFooter();
+    }
+
+    // Cumulative count of times the local user has seen the watching
+    // badge — used to fire the one-time intro tooltip the very first
+    // time the count goes from 0 → 1.
+    let watchingFooterShownCount = 0;
+    function renderWatchingFooter() {
+        const count = (currentState && currentState.spectatorCount) || 0;
+        // The count includes the local user when they're spectating, so
+        // phrase it as "You + N others watching" in that case.
+        if (count <= 0) {
+            watchingFooterEl.hidden = true;
+            watchingFooterEl.innerHTML = '';
+            return;
+        }
+        let text;
+        if (isSpectator) {
+            const others = Math.max(0, count - 1);
+            if (others === 0) {
+                text = '\u{1F441} Only you watching';
+            } else {
+                text = `\u{1F441} You + ${others} other${others === 1 ? '' : 's'} watching`;
+            }
+        } else {
+            text = `\u{1F441} ${count} watching`;
+        }
+        const tip = 'Spectators don\u2019t show in the score list. ' +
+                    (isSpectator
+                        ? 'Click \u201CJoin as player\u201D in the toolbar to play.'
+                        : 'They can see everything but can\u2019t play.');
+        const isFirstReveal = !isSpectator && watchingFooterShownCount === 0;
+        const firstTimeBadge = isFirstReveal
+            ? ' <span class="watching-intro-tooltip">Spectators can see everything but can\u2019t play.</span>'
+            : '';
+        watchingFooterEl.hidden = false;
+        watchingFooterEl.title = tip;
+        watchingFooterEl.innerHTML = `<span class="watching-label">${text}</span>${firstTimeBadge}`;
+        watchingFooterShownCount++;
     }
 
     function renderMyStats() {
@@ -703,19 +911,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="game-over-panel">
                 <h2>Game Over!</h2>
                 <p>Winner: <strong>${escapeHtml(winner ? winner.name : '—')}</strong> (${winner ? winner.setsFound : 0} sets)</p>
-                <p>Your sets: <strong>${me ? me.setsFound : 0}</strong></p>
+                ${isSpectator ? '' : `<p>Your sets: <strong>${me ? me.setsFound : 0}</strong></p>`}
                 <p>Time: <strong>${timeStr}</strong></p>
-                <button id="play-again-btn">New Round</button>
+                ${isSpectator ? '' : '<button id="play-again-btn">New Round</button>'}
                 <button id="replay-btn" class="ghost">▶ Watch Replay</button>
                 <button id="export-btn" class="ghost">Export Game</button>
                 <button id="back-btn" class="ghost">Back to Lobby</button>
             </div>
         `;
         document.body.appendChild(overlay);
-        document.getElementById('play-again-btn').addEventListener('click', async () => {
-            overlay.remove();
-            await SetClient.restart(currentGameId);
-        });
+        if (!isSpectator) {
+            document.getElementById('play-again-btn').addEventListener('click', async () => {
+                overlay.remove();
+                await SetClient.restart(currentGameId);
+            });
+        }
         document.getElementById('replay-btn').addEventListener('click', () => {
             window.location.href = `/replay.html?game=${encodeURIComponent(currentGameId)}`;
         });

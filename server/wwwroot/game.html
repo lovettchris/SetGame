@@ -20,21 +20,29 @@
     <section id="game" class="view">
         <div class="toolbar">
             <button id="leave-btn" class="ghost">&larr; Leave Game</button>
+            <div id="mode-chip" class="mode-chip" hidden>
+                <span class="mode-chip-icon" id="mode-chip-icon">🟢</span>
+                <span class="mode-chip-text" id="mode-chip-text">Playing</span>
+                <button id="mode-switch-btn" class="link-btn mode-chip-switch" type="button"></button>
+            </div>
             <div class="game-name" id="game-name"></div>
             <button id="hint-btn"><span id="hint-label">Hint</span><span id="hint-badge" class="hint-badge" hidden></span></button>
             <div class="toolbar-stats">
-                <div class="stat highlight"><span class="value" id="stat-sets">0</span>Your Sets</div>
+                <div class="stat highlight" id="stat-sets-wrap"><span class="value" id="stat-sets">0</span>Your Sets</div>
                 <div class="stat"><span class="value" id="stat-deck">81</span>Deck</div>
             </div>
         </div>
 
         <div class="players" id="players"></div>
+        <div id="watching-footer" class="watching-footer" hidden></div>
         <div id="board"></div>
         <div id="message" class="message"></div>
+        <div id="spectator-watermark" class="spectator-watermark" hidden>SPECTATING</div>
+        <div id="mode-announcer" class="visually-hidden" role="status" aria-live="polite"></div>
     </section>
 
-    <script src="js/renderer.js?v=13"></script>
-    <script src="js/client.js?v=13"></script>
-    <script src="js/game.js?v=13"></script>
+    <script src="js/renderer.js?v=14"></script>
+    <script src="js/client.js?v=14"></script>
+    <script src="js/game.js?v=16"></script>
 </body>
 </html>

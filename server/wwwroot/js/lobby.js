@@ -18,6 +18,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = `/game.html?id=${encodeURIComponent(id)}`;
     }
 
+    function spectateGame(id) {
+        window.location.href = `/game.html?id=${encodeURIComponent(id)}&spectate=1`;
+    }
+
     async function refreshLeaderboard() {
         try {
             const leaders = await SetClient.getLeaderboard();
@@ -61,18 +65,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             const replayHtml = g.status === 'ended' && g.hasReplay
                 ? `<a class="replay-icon-btn" href="/replay.html?game=${encodeURIComponent(g.id)}" title="Watch replay">🎬</a>`
                 : '';
+            const watcherCount = g.spectatorCount || 0;
+            const watcherHtml = watcherCount > 0
+                ? ` · <span class="game-row-watchers" title="People watching this game">👁 ${watcherCount} watching</span>`
+                : '';
             li.innerHTML = `
                 <div class="game-row-main">
                     <span class="game-row-name">${escapeHtml(g.name)}</span>
-                    <span class="game-row-meta">${g.playerCount} player${g.playerCount === 1 ? '' : 's'} · started ${startedAgo}</span>
+                    <span class="game-row-meta">${g.playerCount} player${g.playerCount === 1 ? '' : 's'}${watcherHtml} · started ${startedAgo}</span>
                 </div>
                 ${replayHtml}
+                <button class="watch-btn ghost" data-id="${g.id}" title="Watch this game without playing">👁 Watch</button>
                 <button class="join-btn" data-id="${g.id}">Join</button>
             `;
             gamesListEl.appendChild(li);
         }
         gamesListEl.querySelectorAll('.join-btn').forEach(btn =>
             btn.addEventListener('click', () => gotoGame(btn.dataset.id)));
+        gamesListEl.querySelectorAll('.watch-btn').forEach(btn =>
+            btn.addEventListener('click', () => spectateGame(btn.dataset.id)));
     }
 
     refreshBtn.addEventListener('click', () => { refreshLobby(); refreshLeaderboard(); });

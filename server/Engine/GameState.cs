@@ -5,9 +5,19 @@ public class PlayerState
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
     public int SetsFound { get; set; }
-    /// <summary>False when the player has left the game. Their row is kept
-    /// (and dimmed on clients) so their score is preserved if they rejoin.</summary>
+    /// <summary>False when the player has left the game OR switched to
+    /// spectating. Their row is kept (and dimmed on clients) so their
+    /// score is preserved if they rejoin.</summary>
     public bool Active { get; set; } = true;
+
+    /// <summary>True when the player is currently watching (not playing
+    /// but still "in the room"). Mutually exclusive with <see cref="Active"/>:
+    /// Active=true means playing, Active=false + Spectating=true means
+    /// they switched to spectator mode, Active=false + Spectating=false
+    /// means they left. Spectators-from-the-start are never recorded in
+    /// <see cref="GameState.Players"/> at all (they're only counted in
+    /// <see cref="GameState.SpectatorCount"/>).</summary>
+    public bool Spectating { get; set; }
 
     /// <summary>Most recently reported client→server round-trip time (ms).
     /// Surfaced in the player bubble so everyone can see who has the worst
@@ -62,10 +72,17 @@ public class GameState
     /// shows up everywhere, not just for the player who clicked.</summary>
     public BroadcastEvent? LastBroadcast { get; set; }
 
+    /// <summary>Number of currently-connected spectators (open SSE streams
+    /// with ?spectate=1). Tracked in-process by the server and overwritten
+    /// onto state before every persist/publish, so every client sees the
+    /// same count. Resets to zero on server restart and rebuilds as
+    /// spectators reconnect.</summary>
+    public int SpectatorCount { get; set; }
+
     public int DeckRemaining => Deck.Count;
 }
 
-public record GameSummary(string Id, string Name, int PlayerCount, long StartedAt, string Status, bool HasReplay = false);
+public record GameSummary(string Id, string Name, int PlayerCount, long StartedAt, string Status, bool HasReplay = false, int SpectatorCount = 0);
 
 /// <summary>All-time wins for one player, stored in the global leaderboard.
 /// Score accumulates opponents defeated (players in game minus 1) per win.</summary>
