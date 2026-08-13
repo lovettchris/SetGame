@@ -5,9 +5,7 @@
 #
 # Both Dockerfiles (server/Dockerfile, client/Dockerfile) use repo-root-
 # relative COPY paths (e.g. "COPY server/ ."), confirming the repo root
-# as the build context. The MSR Hub CI workflow (.github/workflows/
-# deploy-msrhub.yml) invokes "docker compose build" which delegates to
-# docker-compose.yml.
+# as the build context.
 
 # Git
 .git/
@@ -19,7 +17,6 @@ manifest/
 scripts/
 specs/
 samples/
-msr-discovery/
 
 # IDE and tools
 .vscode/

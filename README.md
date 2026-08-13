@@ -1,7 +1,6 @@
 # Set Game
 
-An implementation of the popular Set game to create some fun team building
-across MSR — now multiplayer.
+An implementation of the popular Set game to create some fun team building.
 
 ## Architecture
 
