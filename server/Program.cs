@@ -90,6 +90,7 @@ var app = builder.Build();
     var cosmos = app.Services.GetService<CosmosStore>();
     if (cosmos != null)
     {
+        log.LogInformation("Cosmos DB initializing...");
         await cosmos.InitializeAsync();
         log.LogInformation("Cosmos DB backup enabled");
 

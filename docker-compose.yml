@@ -11,6 +11,30 @@ services:
       - garnetdata:/data
     networks:
       - setgame-network
+      
+  cosmosdb:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: cosmosdb-emulator
+
+    mem_limit: 4g
+
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 5
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+      # AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: host.docker.internal
+
+    ports:
+      - "8081:8081"
+      - "10251:10251"
+      - "10252:10252"
+      - "10253:10253"
+      - "10254:10254"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   # ASP.NET Core 10 client+API garnet (replaces nginx). Serves the SPA
   # statically and exposes the /api/* endpoints, including SSE streams driven

@@ -1,0 +1,3 @@
+@echo off
+echo Assuming you ran "import-cosmos-cert.ps1" while emulator is running in cosmos...
+start https://localhost:8081/_explorer/index.html
